@@ -1,0 +1,4 @@
+@import "tailwindcss";
+
+/* your overrides (optional) */
+html, body { height: 100%; }

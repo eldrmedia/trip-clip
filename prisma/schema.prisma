@@ -1,0 +1,272 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  EMPLOYEE
+  APPROVER
+  ADMIN
+}
+
+enum ExpenseType {
+  FLIGHT
+  HOTEL
+  MEAL
+  RIDESHARE
+  RENTAL
+  MILEAGE
+  OTHER
+}
+
+enum PaymentMethod {
+  CORP_CARD
+  PERSONAL
+  CASH
+}
+
+enum ReportStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  PAID
+}
+
+enum ReportSimpleState {
+  DRAFT
+  READY
+  EXPORTED
+}
+
+enum TripStatus {
+  PLANNED
+  ACTIVE
+  COMPLETED
+  CANCELED
+}
+
+model User {
+  id              String  @id @default(cuid())
+  email           String? @unique
+  name            String?
+  image           String?
+  role            Role    @default(EMPLOYEE)
+  defaultCurrency String  @default("USD")
+  costCenter      String?
+
+  emailVerified DateTime?
+
+  // Google integration flags & prefs
+  googleConnected         Boolean @default(false)
+  googleGmailConnected    Boolean @default(false)
+  googleCalendarConnected Boolean @default(false)
+  googleDriveConnected    Boolean @default(false)
+  googleCalendarId        String?
+  gmailHistoryId          String?
+  driveRootFolderId       String?
+  usePrimaryCalendar      Boolean @default(false)
+  bufferMinutes           Int     @default(90)
+
+  accounts        Account[]
+  sessions        Session[]
+  trips           Trip[]
+  expenses        Expense[]
+  reportsOwned    Report[]        @relation("ReportOwner")
+  reportsApproved Report[]        @relation("ReportApprover")
+  approvals       Approval[]      @relation("ApprovalByApprover")
+  messages        GmailMessage[]
+  activities      ActivityLog[]
+  exportProfiles  ExportProfile[]
+  createdAt       DateTime        @default(now())
+}
+
+model Trip {
+  id        String     @id @default(cuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id])
+  title     String
+  startDate DateTime
+  endDate   DateTime
+  region    String?
+  purpose   String?
+  status    TripStatus @default(PLANNED)
+
+  locationCity     String?
+  locationState    String?
+  locationCountry  String?
+  
+  // External refs
+  calendarEventIds Json?
+  driveFolderId    String?
+
+  createdAt DateTime  @default(now())
+  expenses  Expense[]
+}
+
+model Expense {
+  id       String  @id @default(cuid())
+  userId   String
+  user     User    @relation(fields: [userId], references: [id])
+  tripId   String?
+  trip     Trip?   @relation(fields: [tripId], references: [id])
+  reportId String?
+  report   Report? @relation(fields: [reportId], references: [id])
+
+  type             ExpenseType
+  merchant         String?
+  date             DateTime
+  amountOriginal   Decimal        @db.Decimal(10, 2)
+  currencyOriginal String
+  amountHome       Decimal        @db.Decimal(10, 2)
+  currencyHome     String
+  paymentMethod    PaymentMethod?
+  notes            String?
+  receiptUrl       String?
+  locationCity     String?
+  locationState    String?
+  locationCountry  String?
+  attendees        Json?
+  policyFlags      String[]
+  tags             String[]
+
+  driveFileId String?
+  blobUrl     String?
+
+  mileageDetail MileageDetail?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, date])
+  @@index([reportId])
+}
+
+model MileageDetail {
+  id          String  @id @default(cuid())
+  expenseId   String  @unique
+  expense     Expense @relation(fields: [expenseId], references: [id])
+  origin      String
+  destination String
+  miles       Int
+  rate        Decimal @db.Decimal(5, 2)
+  calcSource  String?
+}
+
+model Report {
+  id          String            @id @default(cuid())
+  userId      String
+  user        User              @relation("ReportOwner", fields: [userId], references: [id])
+  title       String
+  periodStart DateTime
+  periodEnd   DateTime
+  status      ReportStatus      @default(DRAFT)
+  simpleState ReportSimpleState @default(DRAFT)
+  isLocked    Boolean           @default(false)
+  total       Decimal           @default(0) @db.Decimal(12, 2)
+  submittedAt DateTime?
+  approvedAt  DateTime?
+
+  approverId String?
+  approver   User?   @relation("ReportApprover", fields: [approverId], references: [id])
+
+  expenses  Expense[]
+  approvals Approval[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Approval {
+  id         String   @id @default(cuid())
+  reportId   String
+  report     Report   @relation(fields: [reportId], references: [id])
+  approverId String
+  approver   User     @relation("ApprovalByApprover", fields: [approverId], references: [id])
+  decision   String
+  comment    String?
+  decidedAt  DateTime @default(now())
+}
+
+model GmailMessage {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  gmailId      String   @unique
+  threadId     String
+  internalDate BigInt
+  vendor       String?
+  parsedHash   String?
+  tripId       String?
+  createdAt    DateTime @default(now())
+
+  @@index([userId, internalDate])
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  tripId    String?
+  reportId  String?
+  level     String // info|warn|error
+  action    String
+  message   String
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model ExportProfile {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  name      String
+  columns   Json
+  delimiter String   @default(",")
+  createdAt DateTime @default(now())
+}
+
+/**
+ * NextAuth tables
+ */
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id])
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
