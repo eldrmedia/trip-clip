@@ -2,22 +2,28 @@
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
-import React from 'react';
-import Link from 'next/link';
+import React from "react";
+import Link from "next/link";
 
 export default async function TripsPage() {
   const s = await getServerSession();
   if (!s?.user) redirect("/login");
 
+  const userId = (s.user as { id: string }).id;
+
   const trips = await prisma.trip.findMany({
-    where: { userId: (s.user as any).id },
+    where: { userId },
     orderBy: { startDate: "desc" },
   });
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
-      <h1 className="text-2xl font-semibold">My Trips</h1>
-        <Link href="/trips/new/" className="rounded bg-black text-white px-4 py-2 text-sm">New Trip</Link>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">My Trips</h1>
+        <Link href="/trips/new" className="rounded bg-black text-white px-4 py-2 text-sm">
+          New Trip
+        </Link>
+      </div>
 
       {trips.length === 0 ? (
         <p className="text-gray-600">No trips yet.</p>
@@ -27,8 +33,8 @@ export default async function TripsPage() {
             <li key={t.id} className="p-4 rounded bg-white shadow">
               <div className="font-medium">{t.title}</div>
               <div className="text-sm text-gray-600">
-                {t.startDate?.toLocaleDateString()} →{" "}
-                {t.endDate?.toLocaleDateString()}
+                {new Date(t.startDate).toLocaleDateString()} →{" "}
+                {new Date(t.endDate).toLocaleDateString()}
               </div>
             </li>
           ))}

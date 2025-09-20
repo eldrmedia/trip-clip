@@ -6,6 +6,9 @@ export async function convertToHome(
   to = "USD",
   _date?: Date
 ): Promise<number> {
+  // Mark optional param as intentionally unused (keeps future API shape)
+  void _date;
+
   if (!amount || from === to) return amount;
 
   // TODO: plug in ECB/historical rates. For now, passthrough.

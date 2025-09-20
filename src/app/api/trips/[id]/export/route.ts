@@ -1,17 +1,18 @@
 import { getServerSession } from "next-auth";
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from "@/lib/db";
 import { getGoogleOAuthForUser } from "@/lib/google";
 
-function toCSV(rows: Array<Record<string, any>>) {
+// Generic CSV helper without `any`
+function toCSV<T extends Record<string, unknown>>(rows: T[]) {
   if (rows.length === 0) return "message,no rows";
-  const headers = Object.keys(rows[0]);
-  const esc = (v: any) => {
+  const headers = Object.keys(rows[0] as Record<string, unknown>);
+  const esc = (v: unknown) => {
     if (v == null) return "";
     const s = String(v);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  return [headers.join(","), ...rows.map(r => headers.map(h => esc(r[h])).join(","))].join("\n");
+  return [headers.join(","), ...rows.map(r => headers.map(h => esc((r as Record<string, unknown>)[h])).join(","))].join("\n");
 }
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
@@ -19,7 +20,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   if (!s?.user) return new Response("Unauthorized", { status: 401 });
 
   const trip = await prisma.trip.findFirst({
-    where: { id: params.id, userId: (s.user as any).id },
+    where: { id: params.id, userId: (s.user as { id: string }).id },
     include: { expenses: true, user: true },
   });
   if (!trip) return new Response("Not found", { status: 404 });
@@ -45,17 +46,16 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const url = new URL(req.url);
   if (url.searchParams.get("drive") === "1") {
     try {
-      const { drive } = await getGoogleOAuthForUser((s.user as any).id);
+      const { drive } = await getGoogleOAuthForUser((s.user as { id: string }).id);
       const fileMeta = {
         name: filename,
         mimeType: "text/csv",
         parents: trip.driveFolderId ? [trip.driveFolderId] : undefined,
-      } as any;
+      };
       const media = {
         mimeType: "text/csv",
         body: Buffer.from(csv),
-      } as any;
-      // @ts-ignore body can be a Buffer in node
+      };
       const created = await drive.files.create({
         requestBody: fileMeta,
         media,
@@ -76,8 +76,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         status: 200,
         headers: { "content-type": "application/json" },
       });
-    } catch (e: any) {
-      return new Response(JSON.stringify({ ok: false, error: e?.message || "drive upload failed" }), {
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "drive upload failed";
+      return new Response(JSON.stringify({ ok: false, error: message }), {
         status: 500,
         headers: { "content-type": "application/json" },
       });

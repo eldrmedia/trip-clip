@@ -23,20 +23,22 @@ const ExpenseSchema = z.object({
 async function resolveUserId() {
   const s = await getServerSession();
   if (!s?.user) redirect("/login");
-  let uid = (s.user as any).id as string | undefined;
-  if (!uid && s.user.email) {
+
+  const u = s.user as { id?: string; email?: string | null };
+  let uid = u.id;
+
+  if (!uid && u.email) {
     const found = await prisma.user.findUnique({
-      where: { email: s.user.email },
+      where: { email: u.email },
       select: { id: true },
     });
-    uid = found?.id;
+    uid = found?.id ?? undefined;
   }
   if (!uid) throw new Error("Could not resolve current user id");
   return uid;
 }
 
 export async function createExpense(formData: FormData) {
-  // Keep errors visible in server log (helps when UI shows the generic error)
   try {
     const userId = await resolveUserId();
 
@@ -65,11 +67,11 @@ export async function createExpense(formData: FormData) {
     const amountOriginal = parsed.amountOriginal;
     const amountHome = amountOriginal;
     // If you implemented fx.ts, uncomment this:
-    // amountHome = await convertToHome(amountOriginal, parsed.currencyOriginal, currencyHome, date);
+    // const amountHome = await convertToHome(amountOriginal, parsed.currencyOriginal, currencyHome, date);
 
-    // Optional file upload
+    // Optional file upload (currently disabled)
+    const receiptUrl: string | null = null;
     // const file = formData.get("receipt") as File | null;
-    // let receiptUrl: string | null = null;
     // if (file && file.size > 0) {
     //   // TODO: upload to Drive or Blob storage, set receiptUrl
     // }
@@ -84,7 +86,8 @@ export async function createExpense(formData: FormData) {
         currencyOriginal: parsed.currencyOriginal,
         amountHome,
         currencyHome,
-        paymentMethod: (parsed.paymentMethod as any) || null,
+        // no 'any' cast needed; Prisma expects the enum or null
+        paymentMethod: parsed.paymentMethod ?? null,
         trip: parsed.tripId ? { connect: { id: parsed.tripId } } : undefined,
         notes: parsed.notes || null,
         receiptUrl,
@@ -99,7 +102,8 @@ export async function createExpense(formData: FormData) {
       redirect("/expenses");
     }
   } catch (err) {
+     
     console.error("createExpense failed:", err);
-    throw err; // Let Next show the error overlay so you can see details in server logs
+    throw err;
   }
 }

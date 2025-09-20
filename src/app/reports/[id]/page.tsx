@@ -1,12 +1,14 @@
 import { getServerSession } from "next-auth";
 import { redirect, notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import Link from "next/link";
 
 export default async function ReportDetail({ params }: { params: { id: string } }) {
-  const s = await getServerSession(); if (!s?.user) redirect("/login");
+  const s = await getServerSession();
+  if (!s?.user) redirect("/login");
 
   const report = await prisma.report.findFirst({
-    where: { id: params.id, userId: (s.user as any).id },
+    where: { id: params.id, userId: (s.user as { id: string }).id },
     include: {
       expenses: { orderBy: { date: "asc" } },
       approver: true,
@@ -22,8 +24,10 @@ export default async function ReportDetail({ params }: { params: { id: string } 
         <div>
           <h1 className="text-2xl font-semibold">{report.title}</h1>
           <div className="text-gray-600 text-sm">
-                      <Link href={`/api/reports/${report.id}/csv`} className="rounded border px-4 py-2">Export CSV</Link>
-
+            <Link href={`/api/reports/${report.id}/csv`} className="rounded border px-4 py-2">
+              Export CSV
+            </Link>
+            {" "}
             {new Date(report.periodStart).toLocaleDateString()} → {new Date(report.periodEnd).toLocaleDateString()}
           </div>
           <div className="text-sm mt-1">

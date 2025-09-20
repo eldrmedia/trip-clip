@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { prisma } from "@/lib/db";
 import { getGoogleOAuthForUser } from "@/lib/google";
 import { parseEmail } from "@/lib/parsers/parseItinerary";
@@ -59,8 +59,9 @@ export async function GET() {
         await logActivity(u.id, { tripId: trip.id, action: "TRIP_CREATED", message: `Trip from ${parsed.vendor ?? "email"}` });
         processed++;
       }
-    } catch (e:any) {
-      await logActivity(u.id, { level: "error", action: "GMAIL_POLL_FAIL", message: e?.message ?? String(e) });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await logActivity(u.id, { level: "error", action: "GMAIL_POLL_FAIL", message: msg });
     }
   }
   return NextResponse.json({ ok: true, processed });

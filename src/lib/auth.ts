@@ -48,16 +48,16 @@ export const authConfig: NextAuthConfig = {
   callbacks: {
     // Put the DB user id into the token on initial sign-in
     async jwt({ token, user }) {
-      if (user) {
-        // 'user.id' is from Prisma after the adapter creates/fetches the user
-        (token as any).uid = user.id;
+      // On first sign-in, user is defined and comes from the adapter (has id)
+      if (user && "id" in user && typeof (user as { id: unknown }).id === "string") {
+        token.id = (user as { id: string }).id;
       }
       return token;
     },
     // Copy the id from the token onto the session for easy server-side use
     async session({ session, token }) {
-      if (session.user) {
-        (session.user as any).id = (token as any).uid ?? token.sub ?? null;
+      if (session.user && token.id) {
+        session.user.id = token.id; // typed via module augmentation
       }
       return session;
     },

@@ -25,12 +25,13 @@ export default async function GoogleSettings() {
   const s = await getServerSession();
   if (!s?.user) redirect("/login");
 
-  const user =
-    (s.user as any).id
-      ? await prisma.user.findUnique({ where: { id: (s.user as any).id } })
-      : s.user.email
-      ? await prisma.user.findUnique({ where: { email: s.user.email } })
-      : null;
+  const su = s.user as { id?: string; email?: string | null };
+
+  const user = su.id
+    ? await prisma.user.findUnique({ where: { id: su.id } })
+    : su.email
+    ? await prisma.user.findUnique({ where: { email: su.email } })
+    : null;
 
   if (!user) redirect("/login");
 
@@ -46,7 +47,7 @@ export default async function GoogleSettings() {
     granted.some((s) => s.startsWith("https://www.googleapis.com/auth/gmail"));
   const hasCalendar =
     user.googleCalendarConnected ||
-    granted.includes("https://www.googleapis.com/auth/calendar") || // if previously granted broad scope
+    granted.includes("https://www.googleapis.com/auth/calendar") ||
     granted.includes("https://www.googleapis.com/auth/calendar.events");
   const hasDrive =
     user.googleDriveConnected ||

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import Link from "next/link";
+import type { Prisma, ExpenseType } from "@prisma/client";
 
 export default async function ExpensesPage({
   searchParams,
@@ -12,14 +13,20 @@ export default async function ExpensesPage({
   const s = await getServerSession();
   if (!s?.user) redirect("/login");
 
-  const params = await searchParams; // ✅ await in Next 15
-  const where: any = { userId: (s.user as any).id };
+  const params = await searchParams; // Next 15: Route Handlers/Pages can await this
+  const userId = (s.user as { id: string }).id;
 
-  if (params.type && params.type !== "ALL") where.type = params.type;
+  // Strongly type the Prisma where input
+  const where: Prisma.ExpenseWhereInput = { userId };
+
+  if (params.type && params.type !== "ALL") {
+    // cast to the generated Prisma enum
+    where.type = params.type as ExpenseType;
+  }
   if (params.q) {
     where.OR = [
       { merchant: { contains: params.q, mode: "insensitive" } },
-      { notes: { contains: params.q, mode: "insensitive" } },
+      { notes:    { contains: params.q, mode: "insensitive" } },
     ];
   }
 
@@ -30,7 +37,7 @@ export default async function ExpensesPage({
     include: { trip: true, report: true },
   });
 
-  const types = ["ALL","FLIGHT","HOTEL","MEAL","RIDESHARE","RENTAL","MILEAGE","OTHER"];
+  const types: Array<"ALL" | ExpenseType> = ["ALL","FLIGHT","HOTEL","MEAL","RIDESHARE","RENTAL","MILEAGE","OTHER"];
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -44,7 +51,7 @@ export default async function ExpensesPage({
       <form className="flex gap-3">
         <select
           name="type"
-          defaultValue={params.type ?? "ALL"} // ✅ use awaited params
+          defaultValue={params.type ?? "ALL"}
           className="rounded border px-3 py-2 text-sm"
         >
           {types.map((t) => (
@@ -54,7 +61,7 @@ export default async function ExpensesPage({
         <input
           name="q"
           placeholder="Search merchant/notes…"
-          defaultValue={params.q ?? ""} // ✅ use awaited params
+          defaultValue={params.q ?? ""}
           className="rounded border px-3 py-2 text-sm flex-1"
         />
         <button className="rounded border px-3 py-2 text-sm">Filter</button>

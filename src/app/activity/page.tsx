@@ -6,7 +6,7 @@ export default async function ActivityPage() {
   const s = await getServerSession(); if (!s?.user) redirect("/login");
 
   const logs = await prisma.activityLog.findMany({
-    where: { userId: (s.user as any).id },
+    where: { userId: (s.user as { id: string }).id },
     orderBy: { createdAt: "desc" },
     take: 200,
   });

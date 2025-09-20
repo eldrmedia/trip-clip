@@ -1,82 +1,136 @@
-import { prisma } from "./db";
-import { getGoogleOAuthForUser } from "./google";
-import { logActivity } from "./log";
-import type { ParsedItin } from "./parsers/parseItinerary";
+// src/lib/parsers/parseItinerary.ts
+import crypto from "crypto";
+// import * as ical from "ical"; // when you wire ICS parsing back in
+import * as cheerio from "cheerio";
 
-export async function createOrUpdateTripArtifacts(userId: string, tripId: string, parsed: ParsedItin) {
-  const user = await prisma.user.findUnique({ where: { id: userId } }); if (!user) return;
+export type ParsedLeg = {
+  fromCity?: string;
+  toCity?: string;
+  departure: Date;
+  arrival: Date;
+};
 
-  if (user.googleCalendarConnected) {
-    const ids = await createOrUpdateCalendarEvents(user, parsed);
-    await prisma.trip.update({ where: { id: tripId }, data: { calendarEventIds: ids } });
+export type ParsedItin = {
+  vendor?: string;
+  confirmation?: string;
+  legs: ParsedLeg[];
+  hash: string;
+  confidence: number;
+};
+
+// Minimal Gmail API message type (enough for our parser)
+interface GmailMessagePart {
+  mimeType?: string;
+  body?: { data?: string };
+  parts?: GmailMessagePart[];
+}
+
+interface GmailMessage {
+  payload?: GmailMessagePart;
+  [key: string]: unknown;
+}
+
+export async function parseEmail(message: GmailMessage): Promise<ParsedItin | null> {
+  const { html, text } = extractBodies(message.payload);
+
+  const jsonld = extractJsonLd(html);
+  if (jsonld) return normalizeFromJsonLd(jsonld);
+
+  // Currently no-op; signature takes no args to avoid unused warnings
+  const ics = await extractIcs();
+  if (ics) return normalizeFromIcs();
+
+  const vendor = detectVendor(html, text);
+  // Currently no-op; signature takes only the bodies to avoid unused vendor warnings
+  const vendorParsed = vendor ? tryVendorParsers(html, text) : null;
+  if (vendorParsed) return vendorParsed;
+
+  if (!html && !text) return null;
+  return genericFallback((text || html)!);
+}
+
+/* helpers */
+function extractBodies(msg?: GmailMessagePart) {
+  const html = part(msg, "text/html");
+  const text = part(msg, "text/plain");
+  return { html, text };
+}
+
+function part(node: GmailMessagePart | undefined, mime: string): string | undefined {
+  if (!node) return;
+  if (node.mimeType === mime && node.body?.data) {
+    return Buffer.from(node.body.data, "base64").toString("utf8");
   }
-  if (user.googleDriveConnected) {
-    const folderId = await ensureTripDriveFolders(user, tripId);
-    await prisma.trip.update({ where: { id: tripId }, data: { driveFolderId: folderId } });
+  if (node.parts) {
+    for (const p of node.parts) {
+      const got = part(p, mime);
+      if (got) return got;
+    }
   }
 }
 
-async function createOrUpdateCalendarEvents(user:any, parsed: ParsedItin){
-  const { calendar } = await getGoogleOAuthForUser(user.id);
-  const calendarId = user.usePrimaryCalendar ? "primary" : await ensureTravelCalendar(user, calendar);
-  const buffer = user.bufferMinutes ?? 90;
-  const ids:string[] = [];
-
-  for (const leg of parsed.legs) {
-    const dep = leg.departure; const arr = leg.arrival;
-    // main
-    const main = await calendar.events.insert({
-      calendarId, requestBody: {
-        summary: `${leg.fromCity ?? ""}→${leg.toCity ?? ""} (${parsed.confirmation ?? ""})`.trim(),
-        description: `Auto-created by Expense App (${parsed.vendor ?? "travel"})`,
-        start: { dateTime: dep.toISOString() }, end: { dateTime: arr.toISOString() }, transparency: "opaque",
-      }
-    }); ids.push(main.data.id!);
-
-    // buffers (freebusy-checked)
-    const preStart = new Date(dep.getTime() - buffer*60*1000);
-    const postEnd  = new Date(arr.getTime() + buffer*60*1000);
-
-    const fbPre = await calendar.freebusy.query({ requestBody: { timeMin: preStart.toISOString(), timeMax: dep.toISOString(), items: [{ id: calendarId }] } });
-    const preConflict = (fbPre.data.calendars?.[calendarId]?.busy?.length ?? 0) > 0;
-    const pre = await calendar.events.insert({
-      calendarId, requestBody: { summary: "Travel buffer (to airport)" + (preConflict ? " — overlaps existing" : ""),
-      start: { dateTime: preStart.toISOString() }, end: { dateTime: dep.toISOString() }, transparency: "opaque" }
-    }); ids.push(pre.data.id!);
-
-    const fbPost = await calendar.freebusy.query({ requestBody: { timeMin: arr.toISOString(), timeMax: postEnd.toISOString(), items: [{ id: calendarId }] } });
-    const postConflict = (fbPost.data.calendars?.[calendarId]?.busy?.length ?? 0) > 0;
-    const post = await calendar.events.insert({
-      calendarId, requestBody: { summary: "Travel buffer (from airport)" + (postConflict ? " — overlaps existing" : ""),
-      start: { dateTime: arr.toISOString() }, end: { dateTime: postEnd.toISOString() }, transparency: "opaque" }
-    }); ids.push(post.data.id!);
+function extractJsonLd(html?: string): Record<string, unknown> | null {
+  if (!html) return null;
+  const $ = cheerio.load(html);
+  const blocks = $('script[type="application/ld+json"]');
+  if (!blocks.length) return null;
+  try {
+    return JSON.parse(blocks.first().text()) as Record<string, unknown>;
+  } catch {
+    return null;
   }
-  await logActivity(user.id, { action: "CALENDAR_EVENTS_CREATED", message: `Created ${ids.length} events` });
-  return ids;
 }
 
-async function ensureTravelCalendar(user:any, calendar:any){
-  if (user.googleCalendarId) return user.googleCalendarId;
-  const cal = await calendar.calendars.insert({ requestBody: { summary: "Travel (Expense App)" } });
-  await prisma.user.update({ where: { id: user.id }, data: { googleCalendarId: cal.data.id! }});
-  return cal.data.id!;
+// Placeholder for ICS handling; keep no-arg signature to avoid unused warnings
+async function extractIcs(): Promise<null> {
+  // TODO: parse attachments with ical.parseICS
+  return null;
 }
 
-async function ensureTripDriveFolders(user:any, tripId:string){
-  const { drive } = await getGoogleOAuthForUser(user.id);
-  const trip = await prisma.trip.findUnique({ where: { id: tripId } });
-  if (!trip) return null;
-  if (trip.driveFolderId) return trip.driveFolderId;
+function detectVendor(html?: string, text?: string): string | undefined {
+  const src = (html || "") + (text || "");
+  if (/Capital One/i.test(src)) return "capitalone";
+  if (/Delta/i.test(src)) return "delta";
+  if (/United/i.test(src)) return "united";
+  if (/American Airlines|AmericanAir/i.test(src)) return "aa";
+  return undefined;
+}
 
-  const name = `${trip.startDate.toISOString().slice(0,10)} ${trip.title.replace(/[/\\]/g,"-")}`;
-  const res = await drive.files.create({
-    requestBody: { name, mimeType: "application/vnd.google-apps.folder",
-      parents: process.env.GOOGLE_DRIVE_PARENT_FOLDER_ID ? [process.env.GOOGLE_DRIVE_PARENT_FOLDER_ID] : undefined },
-    fields: "id"
-  });
-  const root = res.data.id!;
-  await drive.files.create({ requestBody: { name:"Receipts", mimeType:"application/vnd.google-apps.folder", parents:[root] } });
-  await drive.files.create({ requestBody: { name:"Reports",  mimeType:"application/vnd.google-apps.folder", parents:[root] } });
-  await logActivity(user.id, { tripId, action: "DRIVE_FOLDER_CREATED", message: `Drive folder ${name}` });
-  return root;
+// Placeholder for vendor-specific parsers; keep args minimal to avoid unused warnings
+function tryVendorParsers(_html?: string, _text?: string): ParsedItin | null {
+  return null;
+}
+
+function genericFallback(src: string): ParsedItin {
+  const dep = new Date();
+  const arr = new Date(dep.getTime() + 2 * 3600e3);
+  const legs: ParsedLeg[] = [{ fromCity: "TBD", toCity: "TBD", departure: dep, arrival: arr }];
+  const hash = crypto.createHash("sha256").update(src.slice(0, 2000)).digest("hex");
+  return { vendor: "generic", confirmation: undefined, legs, hash, confidence: 0.2 };
+}
+
+function normalizeFromJsonLd(ld: Record<string, unknown>): ParsedItin {
+  const dep = new Date();
+  const arr = new Date(dep.getTime() + 2 * 3600e3);
+  return {
+    vendor: "jsonld",
+    confirmation:
+      typeof ld?.["reservationNumber"] === "string" ? (ld["reservationNumber"] as string) : undefined,
+    legs: [{ departure: dep, arrival: arr }],
+    hash: crypto.randomBytes(8).toString("hex"),
+    confidence: 0.6,
+  };
+}
+
+// No-arg signature to avoid unused param warnings while it’s a stub
+function normalizeFromIcs(): ParsedItin {
+  const dep = new Date();
+  const arr = new Date(dep.getTime() + 2 * 3600e3);
+  return {
+    vendor: "ics",
+    confirmation: undefined,
+    legs: [{ departure: dep, arrival: arr }],
+    hash: crypto.randomBytes(8).toString("hex"),
+    confidence: 0.7,
+  };
 }

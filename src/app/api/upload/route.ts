@@ -14,7 +14,8 @@ export async function POST(req: NextRequest) {
   if (file.size > 20 * 1024 * 1024) return new Response("Too large", { status: 413 });
 
   // Store under a user-scoped path
-  const key = `receipts/${(s.user as any).id}/${Date.now()}_${file.name}`;
+  const userId = (s.user as { id: string }).id;
+  const key = `receipts/${userId}/${Date.now()}_${file.name}`;
   const { url } = await put(key, file, {
     access: "private", // or "public" if you want a public URL
   });

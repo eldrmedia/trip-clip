@@ -7,8 +7,10 @@ export default async function ReportsPage() {
   const s = await getServerSession();
   if (!s?.user) redirect("/login");
 
+  const userId = (s.user as { id: string }).id;
+
   const reports = await prisma.report.findMany({
-    where: { ownerId: (s.user as any).id },
+    where: { ownerId: userId },
     orderBy: { createdAt: "desc" },
   });
 
@@ -22,9 +24,7 @@ export default async function ReportsPage() {
           {reports.map((r) => (
             <li key={r.id} className="p-4 rounded bg-white shadow">
               <div className="font-medium">Report {r.id}</div>
-              <div className="text-sm text-gray-600">
-                Status: {r.status}
-              </div>
+              <div className="text-sm text-gray-600">Status: {r.status}</div>
             </li>
           ))}
         </ul>

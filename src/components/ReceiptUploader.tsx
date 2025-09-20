@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import React, { useState } from "react";
 
 export default function ReceiptUploader({
   onUploaded,
@@ -12,16 +12,18 @@ export default function ReceiptUploader({
   async function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setBusy(true); setError(null);
+    setBusy(true);
+    setError(null);
     try {
       const fd = new FormData();
       fd.append("file", file);
       const res = await fetch("/api/upload", { method: "POST", body: fd });
       if (!res.ok) throw new Error(await res.text());
-      const { url } = await res.json();
-      onUploaded(url);
-    } catch (err: any) {
-      setError(err?.message || "Upload failed");
+      const data = (await res.json()) as { url: string };
+      onUploaded(data.url);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Upload failed";
+      setError(msg);
     } finally {
       setBusy(false);
     }

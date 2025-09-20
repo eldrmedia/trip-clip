@@ -4,10 +4,13 @@ import { prisma } from "@/lib/db";
 import React from 'react';
 
 export default async function TripDetail({ params }: { params: { id: string } }) {
-  const s = await getServerSession(); if (!s?.user) redirect("/login");
+  const s = await getServerSession();
+  if (!s?.user) redirect("/login");
+
+  const userId = (s.user as { id: string }).id;
 
   const trip = await prisma.trip.findFirst({
-    where: { id: params.id, userId: (s.user as any).id },
+    where: { id: params.id, userId: userId },
     include: { expenses: { orderBy: { date: "asc" } } },
   });
   if (!trip) notFound();
@@ -23,6 +26,7 @@ export default async function TripDetail({ params }: { params: { id: string } })
             {new Date(trip.startDate).toLocaleDateString()} → {new Date(trip.endDate).toLocaleDateString()} • {trip.status}
           </div>
         </div>
+        {/* Using <a> is fine here because this hits an API route that returns a file download */}
         <a
           href={`/api/trips/${trip.id}/export`}
           className="rounded bg-black text-white px-4 py-2 text-sm"
