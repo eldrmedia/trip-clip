@@ -2,6 +2,8 @@
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import React from 'react';
+import Link from 'next/link';
 
 export default async function TripsPage() {
   const s = await getServerSession();
@@ -15,7 +17,7 @@ export default async function TripsPage() {
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <h1 className="text-2xl font-semibold">My Trips</h1>
-        <a href="/trips/new" className="rounded bg-black text-white px-4 py-2 text-sm">New Trip</a>
+        <Link href="/trips/new/" className="rounded bg-black text-white px-4 py-2 text-sm">New Trip</Link>
 
       {trips.length === 0 ? (
         <p className="text-gray-600">No trips yet.</p>

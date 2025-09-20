@@ -25,6 +25,7 @@ export async function logActivity(
     });
   } catch (err) {
     // Make sure this never crashes the caller
+     
     console.error("logActivity failed:", err);
   }
 }

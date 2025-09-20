@@ -1,6 +1,8 @@
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { createTrip } from "../actions";
+import React from 'react';
+import Link from 'next/link';
 
 export default async function NewTripPage() {
   const s = await getServerSession();
@@ -50,7 +52,7 @@ export default async function NewTripPage() {
 
         <div className="flex gap-3">
           <button className="rounded bg-black text-white px-4 py-2">Create trip</button>
-          <a href="/trips" className="rounded border px-4 py-2">Cancel</a>
+          <Link href="/trips/" className="rounded border px-4 py-2">Cancel</Link>
         </div>
       </form>
     </div>

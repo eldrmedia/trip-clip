@@ -63,7 +63,7 @@ export async function createExpense(formData: FormData) {
 
     // Convert amount (noop if you don't have FX hooked yet)
     const amountOriginal = parsed.amountOriginal;
-    let amountHome = amountOriginal;
+    const amountHome = amountOriginal;
     // If you implemented fx.ts, uncomment this:
     // amountHome = await convertToHome(amountOriginal, parsed.currencyOriginal, currencyHome, date);
 

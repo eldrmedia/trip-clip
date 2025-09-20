@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { redirect, notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import React from 'react';
 
 export default async function TripDetail({ params }: { params: { id: string } }) {
   const s = await getServerSession(); if (!s?.user) redirect("/login");

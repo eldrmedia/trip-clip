@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from "@/lib/db";
 import { getGoogleOAuthForUser } from "@/lib/google";
 import { parseEmail } from "@/lib/parsers/parseItinerary";
