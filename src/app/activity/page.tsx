@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 
 export default async function ActivityPage() {
+  const _authConfig = authConfig;
   const s = await getServerSession(); if (!s?.user) redirect("/login");
 
   const logs = await prisma.activityLog.findMany({
