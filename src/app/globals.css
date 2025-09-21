@@ -2,3 +2,20 @@
 
 /* your overrides (optional) */
 html, body { height: 100%; }
+
+/* === Bottom Tabs helpers (Tailwind @layer) === */
+@layer utilities {
+  /* Pads for iOS home-indicator area */
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  /* Extra bottom space so content doesn't hide under the tab bar on mobile */
+  .with-bottom-tabs {
+    padding-bottom: calc(56px + env(safe-area-inset-bottom)); /* tab height + safe area */
+  }
+  @screen md {
+    .with-bottom-tabs {
+      padding-bottom: 0; /* no extra padding at md+ where tabs are hidden */
+    }
+  }
+}

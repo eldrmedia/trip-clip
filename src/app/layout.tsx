@@ -1,10 +1,9 @@
 // src/app/layout.tsx
-import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import type { Metadata } from "next";
-import { Analytics } from "@vercel/analytics/next"
-import Header from "@/components/Header";
+import type { Metadata, Viewport } from "next";
+import { Analytics } from "@vercel/analytics/next";
 import { Toaster } from "react-hot-toast";
+import ClientChrome from "./ClientChrome";
 
 export const metadata: Metadata = {
   title: "TripClip",
@@ -20,12 +19,12 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <Analytics/>
       <body className="bg-neutral-50 text-neutral-900 antialiased">
-        <Header />
-        <main className="pt-14 md:pt-16 min-h-[100dvh] mx-auto max-w-screen-xl px-4">
-          {children}
-        </main>
+        {/* Client shell decides when to show header/tabs and applies padding */}
+        <ClientChrome>{children}</ClientChrome>
+
+        {/* Keep analytics and toaster inside body */}
+        <Analytics />
         <Toaster position="bottom-right" toastOptions={{ duration: 4000 }} />
       </body>
     </html>
