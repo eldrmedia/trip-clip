@@ -1,9 +1,10 @@
 import { getServerSession } from "next-auth";
+import { authConfig } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 
 export default async function ProfileSettings() {
-  const s = await getServerSession();
+  const s = await getServerSession(authConfig);
   if (!s?.user) redirect("/login");
 
   const su = s.user as { id?: string; email?: string | null };

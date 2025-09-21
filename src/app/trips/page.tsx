@@ -1,12 +1,12 @@
 // src/app/trips/page.tsx
 import { getServerSession } from "next-auth";
+import { authConfig } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
-import React from "react";
 import Link from "next/link";
 
 export default async function TripsPage() {
-  const s = await getServerSession();
+  const s = await getServerSession(authConfig);
   if (!s?.user) redirect("/login");
 
   const userId = (s.user as { id: string }).id;
@@ -30,12 +30,18 @@ export default async function TripsPage() {
       ) : (
         <ul className="space-y-4">
           {trips.map((t) => (
-            <li key={t.id} className="p-4 rounded bg-white shadow">
-              <div className="font-medium">{t.title}</div>
-              <div className="text-sm text-gray-600">
-                {new Date(t.startDate).toLocaleDateString()} →{" "}
-                {new Date(t.endDate).toLocaleDateString()}
-              </div>
+            <li key={t.id}>
+              <Link
+                href={`/trips/${t.id}`}
+                className="block rounded bg-white shadow hover:shadow-md transition-shadow focus:outline-none focus:ring-2 focus:ring-black/20"
+              >
+                <div className="p-4">
+                  <div className="font-medium">{t.title}</div>
+                  <div className="text-sm text-gray-600">
+                    {new Date(t.startDate).toLocaleDateString()} → {new Date(t.endDate).toLocaleDateString()}
+                  </div>
+                </div>
+              </Link>
             </li>
           ))}
         </ul>

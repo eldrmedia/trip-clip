@@ -1,136 +1,145 @@
-// src/lib/parsers/parseItinerary.ts
-import crypto from "crypto";
-// import * as ical from "ical"; // when you wire ICS parsing back in
-import * as cheerio from "cheerio";
+// src/lib/googleArtifacts.ts
+import { prisma } from "@/lib/db";
+import { logActivity } from "@/lib/log";
+import type { ParsedItin } from "@/lib/parsers/parseItinerary";
+import { getGoogleOAuthForUser } from "@/lib/google";
 
-export type ParsedLeg = {
-  fromCity?: string;
-  toCity?: string;
-  departure: Date;
-  arrival: Date;
-};
+export async function createOrUpdateTripArtifacts(
+  userId: string,
+  tripId: string,
+  parsed?: ParsedItin
+): Promise<void> {
+  const [user, trip] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        googleDriveConnected: true,
+        googleCalendarConnected: true,
+        bufferMinutes: true,
+        usePrimaryCalendar: true,
+      },
+    }),
+    prisma.trip.findUnique({
+      where: { id: tripId },
+      select: { id: true, title: true, startDate: true, endDate: true, driveFolderId: true },
+    }),
+  ]);
+  if (!user || !trip) return;
 
-export type ParsedItin = {
-  vendor?: string;
-  confirmation?: string;
-  legs: ParsedLeg[];
-  hash: string;
-  confidence: number;
-};
-
-// Minimal Gmail API message type (enough for our parser)
-interface GmailMessagePart {
-  mimeType?: string;
-  body?: { data?: string };
-  parts?: GmailMessagePart[];
-}
-
-interface GmailMessage {
-  payload?: GmailMessagePart;
-  [key: string]: unknown;
-}
-
-export async function parseEmail(message: GmailMessage): Promise<ParsedItin | null> {
-  const { html, text } = extractBodies(message.payload);
-
-  const jsonld = extractJsonLd(html);
-  if (jsonld) return normalizeFromJsonLd(jsonld);
-
-  // Currently no-op; signature takes no args to avoid unused warnings
-  const ics = await extractIcs();
-  if (ics) return normalizeFromIcs();
-
-  const vendor = detectVendor(html, text);
-  // Currently no-op; signature takes only the bodies to avoid unused vendor warnings
-  const vendorParsed = vendor ? tryVendorParsers(html, text) : null;
-  if (vendorParsed) return vendorParsed;
-
-  if (!html && !text) return null;
-  return genericFallback((text || html)!);
-}
-
-/* helpers */
-function extractBodies(msg?: GmailMessagePart) {
-  const html = part(msg, "text/html");
-  const text = part(msg, "text/plain");
-  return { html, text };
-}
-
-function part(node: GmailMessagePart | undefined, mime: string): string | undefined {
-  if (!node) return;
-  if (node.mimeType === mime && node.body?.data) {
-    return Buffer.from(node.body.data, "base64").toString("utf8");
+  // Try to get Google clients (may throw if not configured)
+  let drive: any | undefined;
+  let calendar: any | undefined;
+  try {
+    const clients = await getGoogleOAuthForUser(userId);
+    drive = (clients as any).drive;
+    calendar = (clients as any).calendar;
+  } catch {
+    // continue with whatever is available
   }
-  if (node.parts) {
-    for (const p of node.parts) {
-      const got = part(p, mime);
-      if (got) return got;
+
+  // 1) Drive folder
+  if (user.googleDriveConnected && drive && !trip.driveFolderId) {
+    try {
+      const folderName = `${trip.title} (${toDateStr(trip.startDate)} → ${toDateStr(trip.endDate)})`;
+      const created = await drive.files.create({
+        requestBody: {
+          name: folderName,
+          mimeType: "application/vnd.google-apps.folder",
+        },
+        fields: "id, name, webViewLink",
+      });
+      const id = created?.data?.id as string | undefined;
+      if (id) {
+        await prisma.trip.update({ where: { id: trip.id }, data: { driveFolderId: id } });
+        await logActivity(userId, {
+          tripId: trip.id,
+          level: "info",
+          action: "drive_folder_created",
+          message: `Created Drive folder ${created?.data?.name ?? id}`,
+          meta: { id, link: created?.data?.webViewLink },
+        });
+      }
+    } catch (err) {
+      await logActivity(userId, {
+        tripId: trip.id,
+        level: "warn",
+        action: "drive_folder_create_failed",
+        message: err instanceof Error ? err.message : "Drive folder create failed",
+      });
+    }
+  }
+
+  // 2) Calendar: single window event (trip start/end +/- buffer)
+  if (user.googleCalendarConnected && calendar) {
+    try {
+      const buffer = typeof user.bufferMinutes === "number" ? user.bufferMinutes : 90;
+      const start = new Date(trip.startDate);
+      const end = new Date(trip.endDate);
+      const startWithBuffer = new Date(start.getTime() - buffer * 60 * 1000);
+      const endWithBuffer = new Date(end.getTime() + buffer * 60 * 1000);
+
+      // Create a new event every time (simple). If you later add a column to store an eventId,
+      // switch to upsert semantics.
+      const res = await calendar.events.insert({
+        calendarId: user.usePrimaryCalendar ? "primary" : "primary",
+        requestBody: {
+          summary: `Trip: ${trip.title}`,
+          description: parsed?.confirmation ? `Confirmation: ${parsed.confirmation}` : undefined,
+          start: { dateTime: startWithBuffer.toISOString() },
+          end: { dateTime: endWithBuffer.toISOString() },
+        },
+      });
+
+      await logActivity(userId, {
+        tripId: trip.id,
+        level: "info",
+        action: "calendar_event_created",
+        message: `Created calendar event for ${trip.title}`,
+        meta: { eventId: res?.data?.id },
+      });
+    } catch (err) {
+      await logActivity(userId, {
+        tripId: trip.id,
+        level: "warn",
+        action: "calendar_event_failed",
+        message: err instanceof Error ? err.message : "Calendar event create failed",
+      });
+    }
+  }
+
+  // 3) Optional: refine title from parsed
+  if (parsed?.confirmation || parsed?.vendor) {
+    try {
+      const nextTitle = buildTitle(trip.title, parsed);
+      if (nextTitle && nextTitle !== trip.title) {
+        await prisma.trip.update({ where: { id: trip.id }, data: { title: nextTitle } });
+        await logActivity(userId, {
+          tripId: trip.id,
+          level: "info",
+          action: "trip_title_updated",
+          message: `Updated title to ${nextTitle}`,
+        });
+      }
+    } catch {
+      // ignore
     }
   }
 }
 
-function extractJsonLd(html?: string): Record<string, unknown> | null {
-  if (!html) return null;
-  const $ = cheerio.load(html);
-  const blocks = $('script[type="application/ld+json"]');
-  if (!blocks.length) return null;
-  try {
-    return JSON.parse(blocks.first().text()) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
+function toDateStr(d: Date | string) {
+  const dt = typeof d === "string" ? new Date(d) : d;
+  return isNaN(+dt) ? "" : dt.toISOString().slice(0, 10);
 }
-
-// Placeholder for ICS handling; keep no-arg signature to avoid unused warnings
-async function extractIcs(): Promise<null> {
-  // TODO: parse attachments with ical.parseICS
-  return null;
-}
-
-function detectVendor(html?: string, text?: string): string | undefined {
-  const src = (html || "") + (text || "");
-  if (/Capital One/i.test(src)) return "capitalone";
-  if (/Delta/i.test(src)) return "delta";
-  if (/United/i.test(src)) return "united";
-  if (/American Airlines|AmericanAir/i.test(src)) return "aa";
-  return undefined;
-}
-
-// Placeholder for vendor-specific parsers; keep args minimal to avoid unused warnings
-function tryVendorParsers(_html?: string, _text?: string): ParsedItin | null {
-  return null;
-}
-
-function genericFallback(src: string): ParsedItin {
-  const dep = new Date();
-  const arr = new Date(dep.getTime() + 2 * 3600e3);
-  const legs: ParsedLeg[] = [{ fromCity: "TBD", toCity: "TBD", departure: dep, arrival: arr }];
-  const hash = crypto.createHash("sha256").update(src.slice(0, 2000)).digest("hex");
-  return { vendor: "generic", confirmation: undefined, legs, hash, confidence: 0.2 };
-}
-
-function normalizeFromJsonLd(ld: Record<string, unknown>): ParsedItin {
-  const dep = new Date();
-  const arr = new Date(dep.getTime() + 2 * 3600e3);
-  return {
-    vendor: "jsonld",
-    confirmation:
-      typeof ld?.["reservationNumber"] === "string" ? (ld["reservationNumber"] as string) : undefined,
-    legs: [{ departure: dep, arrival: arr }],
-    hash: crypto.randomBytes(8).toString("hex"),
-    confidence: 0.6,
-  };
-}
-
-// No-arg signature to avoid unused param warnings while it’s a stub
-function normalizeFromIcs(): ParsedItin {
-  const dep = new Date();
-  const arr = new Date(dep.getTime() + 2 * 3600e3);
-  return {
-    vendor: "ics",
-    confirmation: undefined,
-    legs: [{ departure: dep, arrival: arr }],
-    hash: crypto.randomBytes(8).toString("hex"),
-    confidence: 0.7,
-  };
+function buildTitle(current: string, parsed?: ParsedItin): string | null {
+  if (!parsed) return null;
+  const from = parsed.legs?.[0]?.fromCity;
+  const to = parsed.legs?.[parsed.legs.length - 1]?.toCity;
+  const conf = parsed.confirmation;
+  const parts = [
+    from && to ? `${from} → ${to}` : undefined,
+    conf ? `[${conf}]` : undefined,
+  ].filter(Boolean);
+  if (parts.length === 0) return null;
+  return parts.join(" ");
 }

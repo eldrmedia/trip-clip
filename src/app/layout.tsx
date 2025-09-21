@@ -1,26 +1,20 @@
+// src/app/layout.tsx
 import "./globals.css";
-import Link from "next/link";
-import { getServerSession } from "next-auth";
+import type { Metadata } from "next";
+import Header from "@/components/Header";
+import { Toaster } from "react-hot-toast";
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const session = await getServerSession();
+export const metadata: Metadata = {
+  title: "TripClip",
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-gray-50 text-gray-900">
-        <header className="border-b bg-white">
-          <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
-            <Link href="/" className="font-semibold">Expense Hawk</Link>
-            <nav className="flex gap-4 text-sm">
-              <Link href="/expenses">Expenses</Link>
-              <Link href="/trips">Trips</Link>
-              <Link href="/reports">Reports</Link>
-              <Link href="/settings/google">Settings</Link>
-              <Link href="/activity">Activity</Link>
-            </nav>
-            <div className="text-xs opacity-70">{session?.user?.email ?? "Not signed in"}</div>
-          </div>
-        </header>
-        <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
+      <body className="bg-gray-50 min-h-screen">
+        <Header />
+        <main className="px-4 py-6">{children}</main>
+        <Toaster position="bottom-right" toastOptions={{ duration: 4000 }} />
       </body>
     </html>
   );

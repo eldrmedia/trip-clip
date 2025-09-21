@@ -1,10 +1,11 @@
 import { getServerSession } from "next-auth";
+import { authConfig } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import React from 'react';
 
 export default async function TripDetail({ params }: { params: { id: string } }) {
-  const s = await getServerSession();
+  const s = await getServerSession(authConfig);
   if (!s?.user) redirect("/login");
 
   const userId = (s.user as { id: string }).id;
@@ -33,6 +34,9 @@ export default async function TripDetail({ params }: { params: { id: string } })
         >
           Download CSV
         </a>
+        <form action={`/api/trips/${trip.id}/sync`} method="post">
+          <button className="rounded border px-4 py-2 text-sm">Sync Calendar & Drive</button>
+        </form>
       </div>
 
       <div className="bg-white rounded-xl shadow overflow-hidden">

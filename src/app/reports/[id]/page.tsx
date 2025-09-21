@@ -1,10 +1,11 @@
 import { getServerSession } from "next-auth";
+import { authConfig } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import Link from "next/link";
 
 export default async function ReportDetail({ params }: { params: { id: string } }) {
-  const s = await getServerSession();
+  const s = await getServerSession(authConfig);
   if (!s?.user) redirect("/login");
 
   const report = await prisma.report.findFirst({

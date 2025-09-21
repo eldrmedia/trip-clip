@@ -1,11 +1,12 @@
 // src/app/expenses/new/page.tsx
 import { getServerSession } from "next-auth";
+import { authConfig } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import ExpenseFormClient from "@/components/ExpenseFormClient";
 
 export default async function NewExpensePage() {
-  const s = await getServerSession();
+  const s = await getServerSession(authConfig);
   if (!s?.user) redirect("/login");
 
   const userId = (s.user as { id: string }).id;

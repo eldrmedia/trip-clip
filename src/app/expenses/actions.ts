@@ -2,12 +2,11 @@
 "use server";
 
 import { getServerSession } from "next-auth";
+import { authConfig } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { z } from "zod";
-// OPTIONAL: if you implemented FX, import it. Otherwise we'll noop.
-// import { convertToHome } from "@/lib/fx";
 
 const ExpenseSchema = z.object({
   type: z.enum(["FLIGHT","HOTEL","MEAL","RIDESHARE","RENTAL","MILEAGE","OTHER"]),
@@ -20,90 +19,118 @@ const ExpenseSchema = z.object({
   notes: z.string().optional(),
 });
 
-async function resolveUserId() {
-  const s = await getServerSession();
+async function requireUserId() {
+  const s = await getServerSession(authConfig);
   if (!s?.user) redirect("/login");
+  const uid = (s.user as { id?: string; email?: string | null }).id;
+  if (uid) return uid;
 
-  const u = s.user as { id?: string; email?: string | null };
-  let uid = u.id;
-
-  if (!uid && u.email) {
+  // fallback by email if needed
+  if (s.user.email) {
     const found = await prisma.user.findUnique({
-      where: { email: u.email },
+      where: { email: s.user.email },
       select: { id: true },
     });
-    uid = found?.id ?? undefined;
+    if (found?.id) return found.id;
   }
-  if (!uid) throw new Error("Could not resolve current user id");
-  return uid;
+  throw new Error("Could not resolve current user id");
 }
 
 export async function createExpense(formData: FormData) {
-  try {
-    const userId = await resolveUserId();
+  const userId = await requireUserId();
 
-    const parsed = ExpenseSchema.parse({
-      type: formData.get("type"),
-      date: formData.get("date"),
-      merchant: formData.get("merchant") || undefined,
-      amountOriginal: formData.get("amountOriginal"),
-      currencyOriginal: (formData.get("currencyOriginal") || "USD").toString().toUpperCase(),
-      paymentMethod: formData.get("paymentMethod") || undefined,
-      tripId: formData.get("tripId") || undefined,
-      notes: formData.get("notes") || undefined,
-    });
+  const parsed = ExpenseSchema.parse({
+    type: formData.get("type"),
+    date: formData.get("date"),
+    merchant: formData.get("merchant") || undefined,
+    amountOriginal: formData.get("amountOriginal"),
+    currencyOriginal: (formData.get("currencyOriginal") || "USD").toString().toUpperCase(),
+    paymentMethod: formData.get("paymentMethod") || undefined,
+    tripId: formData.get("tripId") || undefined,
+    notes: formData.get("notes") || undefined,
+  });
 
-    const date = new Date(parsed.date);
-    if (Number.isNaN(+date)) throw new Error("Invalid date");
+  const date = new Date(parsed.date);
+  if (Number.isNaN(+date)) throw new Error("Invalid date");
 
-    // Home currency: use user's default if present
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { defaultCurrency: true },
-    });
-    const currencyHome = (user?.defaultCurrency || "USD").toUpperCase();
+  // home currency
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { defaultCurrency: true },
+  });
+  const currencyHome = (user?.defaultCurrency || "USD").toUpperCase();
 
-    // Convert amount (noop if you don't have FX hooked yet)
-    const amountOriginal = parsed.amountOriginal;
-    const amountHome = amountOriginal;
-    // If you implemented fx.ts, uncomment this:
-    // const amountHome = await convertToHome(amountOriginal, parsed.currencyOriginal, currencyHome, date);
+  await prisma.expense.create({
+    data: {
+      userId,
+      type: parsed.type,
+      date,
+      merchant: parsed.merchant || null,
+      amountOriginal: parsed.amountOriginal,
+      currencyOriginal: parsed.currencyOriginal,
+      amountHome: parsed.amountOriginal, // (convert later if you add FX)
+      currencyHome,
+      paymentMethod: (parsed.paymentMethod as any) || null,
+      tripId: parsed.tripId || null,
+      notes: parsed.notes || null,
+      receiptUrl: null,
+    },
+  });
 
-    // Optional file upload (currently disabled)
-    const receiptUrl: string | null = null;
-    // const file = formData.get("receipt") as File | null;
-    // if (file && file.size > 0) {
-    //   // TODO: upload to Drive or Blob storage, set receiptUrl
-    // }
+  revalidatePath("/expenses");
+  // If you want to send them to the trip, do that — but for toast, send them back to /expenses with the flag:
+  redirect("/expenses?success=created");
+}
 
-    await prisma.expense.create({
-      data: {
-        user: { connect: { id: userId } },
-        type: parsed.type,
-        date,
-        merchant: parsed.merchant || null,
-        amountOriginal,
-        currencyOriginal: parsed.currencyOriginal,
-        amountHome,
-        currencyHome,
-        // no 'any' cast needed; Prisma expects the enum or null
-        paymentMethod: parsed.paymentMethod ?? null,
-        trip: parsed.tripId ? { connect: { id: parsed.tripId } } : undefined,
-        notes: parsed.notes || null,
-        receiptUrl,
-      },
-    });
+export async function updateExpense(id: string, formData: FormData) {
+  const userId = await requireUserId();
 
-    // Revalidate lists and redirect
-    revalidatePath("/expenses");
-    if (parsed.tripId) {
-      redirect(`/trips/${parsed.tripId}`);
-    } else {
-      redirect("/expenses");
-    }
-  } catch (err) {
-     
-    console.error("createExpense failed:", err);
-    throw err;
-  }
+  const parsed = ExpenseSchema.parse({
+    type: formData.get("type"),
+    date: formData.get("date"),
+    merchant: formData.get("merchant") || undefined,
+    amountOriginal: formData.get("amountOriginal"),
+    currencyOriginal: (formData.get("currencyOriginal") || "USD").toString().toUpperCase(),
+    paymentMethod: formData.get("paymentMethod") || undefined,
+    tripId: formData.get("tripId") || undefined,
+    notes: formData.get("notes") || undefined,
+  });
+
+  const date = new Date(parsed.date);
+  if (Number.isNaN(+date)) throw new Error("Invalid date");
+
+  const existing = await prisma.expense.findFirst({ where: { id, userId } });
+  if (!existing) throw new Error("Expense not found or not yours");
+
+  await prisma.expense.update({
+    where: { id },
+    data: {
+      type: parsed.type,
+      date,
+      merchant: parsed.merchant || null,
+      amountOriginal: parsed.amountOriginal,
+      currencyOriginal: parsed.currencyOriginal,
+      // keep amountHome/currencyHome simple for now
+      amountHome: parsed.amountOriginal,
+      currencyHome: existing.currencyHome,
+      paymentMethod: (parsed.paymentMethod as any) || null,
+      tripId: parsed.tripId || null,
+      notes: parsed.notes || null,
+    },
+  });
+
+  revalidatePath("/expenses");
+  redirect("/expenses?success=updated");
+}
+
+export async function deleteExpense(id: string) {
+  const userId = await requireUserId();
+
+  const existing = await prisma.expense.findFirst({ where: { id, userId } });
+  if (!existing) throw new Error("Expense not found or not yours");
+
+  await prisma.expense.delete({ where: { id } });
+
+  revalidatePath("/expenses");
+  redirect("/expenses?success=deleted");
 }

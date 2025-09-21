@@ -1,19 +1,22 @@
 // src/app/expenses/page.tsx
 import { getServerSession } from "next-auth";
+import { authConfig } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import Link from "next/link";
 import type { Prisma, ExpenseType } from "@prisma/client";
+import ExpensesToaster from "./toaster";
 
 export default async function ExpensesPage({
   searchParams,
 }: {
   searchParams: Promise<{ type?: string; q?: string }>;
 }) {
-  const s = await getServerSession();
+  // ✅ Server-side session fetch (safe in RSC)
+  const s = await getServerSession(authConfig);
   if (!s?.user) redirect("/login");
 
-  const params = await searchParams; // Next 15: Route Handlers/Pages can await this
+  const params = await searchParams;
   const userId = (s.user as { id: string }).id;
 
   // Strongly type the Prisma where input
@@ -26,7 +29,7 @@ export default async function ExpensesPage({
   if (params.q) {
     where.OR = [
       { merchant: { contains: params.q, mode: "insensitive" } },
-      { notes:    { contains: params.q, mode: "insensitive" } },
+      { notes: { contains: params.q, mode: "insensitive" } },
     ];
   }
 
@@ -37,10 +40,22 @@ export default async function ExpensesPage({
     include: { trip: true, report: true },
   });
 
-  const types: Array<"ALL" | ExpenseType> = ["ALL","FLIGHT","HOTEL","MEAL","RIDESHARE","RENTAL","MILEAGE","OTHER"];
+  const types: Array<"ALL" | ExpenseType> = [
+    "ALL",
+    "FLIGHT",
+    "HOTEL",
+    "MEAL",
+    "RIDESHARE",
+    "RENTAL",
+    "MILEAGE",
+    "OTHER",
+  ];
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
+      {/* Client-only toast listener */}
+      <ExpensesToaster />
+
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Expenses</h1>
         <Link href="/expenses/new" className="rounded bg-black text-white px-4 py-2 text-sm">
@@ -91,7 +106,12 @@ export default async function ExpensesPage({
               <div className="text-right">${e.amountHome.toString()}</div>
               <div>{e.currencyHome}</div>
               <div>{e.trip?.title ?? "—"}</div>
-              <div>{e.report ? e.report.status : "—"}</div>
+              <div className="flex items-center gap-2">
+                {e.report ? e.report.status : "—"}
+                <Link href={`/expenses/${e.id}/edit`} className="underline text-xs">
+                  Edit
+                </Link>
+              </div>
             </div>
           ))
         )}
