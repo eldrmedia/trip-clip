@@ -1,5 +1,5 @@
 // src/app/api/trips/[id]/export/route.ts
-import { getServerSession } from "next-auth";
+import { getServerSession, type Session } from "next-auth";
 import { authConfig } from "@/lib/auth";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
@@ -16,9 +16,7 @@ function toCSV<T extends Record<string, unknown>>(rows: T[]) {
   };
   return [
     headers.join(","),
-    ...rows.map((r) =>
-      headers.map((h) => esc((r as Record<string, unknown>)[h])).join(",")
-    ),
+    ...rows.map((r) => headers.map((h) => esc((r as Record<string, unknown>)[h])).join(",")),
   ].join("\n");
 }
 
@@ -29,7 +27,8 @@ export async function GET(
 ) {
   const { id } = await context.params;
 
-  const s = await getServerSession(authConfig);
+  // Tell TS what this returns (avoid `{}` inference)
+  const s = (await getServerSession(authConfig)) as unknown as Session | null;
   if (!s?.user) return new Response("Unauthorized", { status: 401 });
 
   const userId = (s.user as { id: string }).id;

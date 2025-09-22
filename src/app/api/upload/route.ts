@@ -1,3 +1,4 @@
+// src/app/api/upload/route.ts
 import { NextRequest } from "next/server";
 import { put } from "@vercel/blob";
 import { getServerSession } from "next-auth";
@@ -16,9 +17,11 @@ export async function POST(req: NextRequest) {
   // Store under a user-scoped path
   const userId = (s.user as { id: string }).id;
   const key = `receipts/${userId}/${Date.now()}_${file.name}`;
-  const { url } = await put(key, file, {
-    access: "private", // or "public" if you want a public URL
-  });
+
+  // Older @vercel/blob type defs only allow "public" even though runtime supports "private".
+  // Keep private behavior, but silence the stale typing:
+  // @ts-expect-error: "private" is valid at runtime; older types only include "public"
+  const { url } = await put(key, file, { access: "private" });
 
   return new Response(JSON.stringify({ url }), {
     status: 200,

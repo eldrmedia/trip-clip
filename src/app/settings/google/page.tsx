@@ -1,6 +1,5 @@
 // src/app/settings/google/page.tsx
-import { getServerSession } from "next-auth";
-import { authConfig } from "@/lib/auth";
+import { getServerSession, type Session } from "next-auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { revalidatePath } from "next/cache";
@@ -9,22 +8,29 @@ import FlashFromQuery from "@/components/FlashFromQuery";
 import ImportGmailNowButton from "@/components/ImportGmailNowButton";
 
 const gmailScopes = [
-  "openid", "email", "profile",
+  "openid",
+  "email",
+  "profile",
   "https://www.googleapis.com/auth/gmail.readonly",
   "https://www.googleapis.com/auth/gmail.modify",
 ];
 const calendarScopes = [
-  "openid", "email", "profile",
+  "openid",
+  "email",
+  "profile",
   "https://www.googleapis.com/auth/calendar.events",
 ];
 const driveScopes = [
-  "openid", "email", "profile",
+  "openid",
+  "email",
+  "profile",
   "https://www.googleapis.com/auth/drive.file",
   "https://www.googleapis.com/auth/drive.metadata.readonly",
 ];
 
 export default async function GoogleSettings() {
-  const s = await getServerSession(authConfig);
+  // Make TS aware this returns a Session (or null)
+  const s = (await getServerSession()) as unknown as Session | null;
   if (!s?.user) redirect("/login");
 
   const su = s.user as { id?: string; email?: string | null };
@@ -35,7 +41,9 @@ export default async function GoogleSettings() {
 
   if (!user) redirect("/login");
 
-  // Flags are the source of truth (set by NextAuth events.linkAccount)
+  // ✅ Capture a stable, non-null value for use in server actions
+  const userId: string = user.id;
+
   const hasGmail = !!user.googleGmailConnected;
   const hasCalendar = !!user.googleCalendarConnected;
   const hasDrive = !!user.googleDriveConnected;
@@ -45,7 +53,7 @@ export default async function GoogleSettings() {
     const usePrim = formData.get("usePrimary") === "on";
     const mins = Number(formData.get("bufferMinutes") || 90);
     await prisma.user.update({
-      where: { id: user.id },
+      where: { id: userId }, // <-- use captured id
       data: { usePrimaryCalendar: usePrim, bufferMinutes: mins },
     });
     revalidatePath("/settings/google");
@@ -56,34 +64,29 @@ export default async function GoogleSettings() {
 
     // Find the Google account to get tokens for revocation
     const acct = await prisma.account.findFirst({
-      where: { userId: user.id, provider: "google" },
+      where: { userId, provider: "google" }, // <-- use captured id
       select: { access_token: true, refresh_token: true },
     });
 
-    // Best-effort revoke on Google's side (revoking refresh_token is preferred)
     const tokenToRevoke = acct?.refresh_token || acct?.access_token;
     if (tokenToRevoke) {
       try {
-        // POST form-encoded body per Google spec
         await fetch("https://oauth2.googleapis.com/revoke", {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({ token: tokenToRevoke }).toString(),
-          // No need to await JSON; 200/400 are both acceptable outcomes to continue
         });
       } catch {
-        // ignore revoke network errors; continue cleanup
+        // best-effort
       }
     }
 
-    // Remove the provider account rows (fully unlinks Google from NextAuth)
     await prisma.account.deleteMany({
-      where: { userId: user.id, provider: "google" },
+      where: { userId, provider: "google" }, // <-- use captured id
     });
 
-    // Clear ALL Google-connected flags since the token is revoked app-wide
     await prisma.user.update({
-      where: { id: user.id },
+      where: { id: userId }, // <-- use captured id
       data: {
         googleGmailConnected: false,
         googleCalendarConnected: false,
@@ -99,11 +102,13 @@ export default async function GoogleSettings() {
       <h1 className="text-2xl font-semibold">Google Connections</h1>
       <FlashFromQuery />
 
-      <div className="rounded-xl border p-4 bg-white">
-        <div className="font-medium mb-2">Gmail Import</div>
-        <p className="text-sm text-gray-600 mb-2">Run the importer immediately (otherwise it runs on a schedule).</p>
+      <div className="rounded-xl border bg-white p-4">
+        <div className="mb-2 font-medium">Gmail Import</div>
+        <p className="mb-2 text-sm text-gray-600">
+          Run the importer immediately (otherwise it runs on a schedule).
+        </p>
         <ImportGmailNowButton />
-      </div>      
+      </div>
 
       <Section
         title="Gmail (read + labels)"
@@ -165,14 +170,10 @@ export default async function GoogleSettings() {
         }
       />
 
-      <form action={save} className="rounded-xl border p-4 space-y-3 bg-white">
+      <form action={save} className="space-y-3 rounded-xl border bg-white p-4">
         <div className="font-medium">Preferences</div>
         <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            name="usePrimary"
-            defaultChecked={!!user.usePrimaryCalendar}
-          />
+          <input type="checkbox" name="usePrimary" defaultChecked={!!user.usePrimaryCalendar} />
           <span>Use primary calendar (instead of dedicated “Travel” calendar)</span>
         </label>
         <label className="block">
@@ -184,7 +185,7 @@ export default async function GoogleSettings() {
             className="mt-1 w-28 rounded border px-2 py-1"
           />
         </label>
-        <button className="rounded bg-black text-white px-3 py-2 text-sm" type="submit">
+        <button className="rounded bg-black px-3 py-2 text-sm text-white" type="submit">
           Save
         </button>
       </form>
@@ -199,7 +200,8 @@ export default async function GoogleSettings() {
           className="underline"
         >
           Google Account
-        </a>.
+        </a>
+        .
       </p>
     </div>
   );
@@ -219,18 +221,18 @@ function Section({
   disconnectAction: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border p-4 bg-white flex items-center justify-between">
+    <div className="flex items-center justify-between rounded-xl border bg-white p-4">
       <div>
         <div className="font-medium">{title}</div>
         <div className="text-sm text-gray-600">{help}</div>
       </div>
       <div className="flex items-center gap-3">
         {connected ? (
-          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
+          <span className="inline-flex items-center rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
             Connected
           </span>
         ) : (
-          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
+          <span className="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
             Not connected
           </span>
         )}

@@ -1,6 +1,5 @@
 // src/app/expenses/page.tsx
-import { getServerSession } from "next-auth";
-import { authConfig } from "@/lib/auth";
+import { getServerSession, type Session } from "next-auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import Link from "next/link";
@@ -12,8 +11,8 @@ export default async function ExpensesPage({
 }: {
   searchParams: Promise<{ type?: string; q?: string }>;
 }) {
-  // ✅ Server-side session fetch (safe in RSC)
-  const s = await getServerSession(authConfig);
+  // Server-side session (assert to avoid `{}` inference)
+  const s = (await getServerSession()) as unknown as Session | null;
   if (!s?.user) redirect("/login");
 
   const params = await searchParams;
@@ -23,7 +22,6 @@ export default async function ExpensesPage({
   const where: Prisma.ExpenseWhereInput = { userId };
 
   if (params.type && params.type !== "ALL") {
-    // cast to the generated Prisma enum
     where.type = params.type as ExpenseType;
   }
   if (params.q) {
@@ -52,13 +50,13 @@ export default async function ExpensesPage({
   ];
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="mx-auto max-w-5xl space-y-6">
       {/* Client-only toast listener */}
       <ExpensesToaster />
 
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Expenses</h1>
-        <Link href="/expenses/new" className="rounded bg-black text-white px-4 py-2 text-sm">
+        <Link href="/expenses/new" className="rounded bg-black px-4 py-2 text-sm text-white">
           Add expense
         </Link>
       </div>
@@ -77,13 +75,13 @@ export default async function ExpensesPage({
           name="q"
           placeholder="Search merchant/notes…"
           defaultValue={params.q ?? ""}
-          className="rounded border bg-white px-3 py-2 text-sm flex-1"
+          className="flex-1 rounded border bg-white px-3 py-2 text-sm"
         />
         <button className="rounded border bg-white px-3 py-2 text-sm">Filter</button>
       </form>
 
-      <div className="bg-white rounded-xl border shadow overflow-hidden">
-        <div className="grid grid-cols-8 gap-3 px-4 py-2 text-xs font-medium border-b">
+      <div className="overflow-hidden rounded-xl border bg-white shadow">
+        <div className="grid grid-cols-8 gap-3 border-b px-4 py-2 text-xs font-medium">
           <div className="col-span-2">Merchant</div>
           <div>Type</div>
           <div>Date</div>
@@ -93,13 +91,10 @@ export default async function ExpensesPage({
           <div>Report</div>
         </div>
         {expenses.length === 0 ? (
-          <div className="px-4 py-6 text-gray-600 text-sm">No expenses found.</div>
+          <div className="px-4 py-6 text-sm text-gray-600">No expenses found.</div>
         ) : (
           expenses.map((e) => (
-            <div
-              key={e.id}
-              className="grid grid-cols-8 gap-3 px-4 py-2 border-b last:border-0 text-sm"
-            >
+            <div key={e.id} className="grid grid-cols-8 gap-3 border-b px-4 py-2 text-sm last:border-0">
               <div className="col-span-2">{e.merchant ?? "—"}</div>
               <div>{e.type}</div>
               <div>{new Date(e.date).toLocaleDateString()}</div>
@@ -108,7 +103,7 @@ export default async function ExpensesPage({
               <div>{e.trip?.title ?? "—"}</div>
               <div className="flex items-center gap-2">
                 {e.report ? e.report.status : "—"}
-                <Link href={`/expenses/${e.id}/edit`} className="underline text-xs">
+                <Link href={`/expenses/${e.id}/edit`} className="text-xs underline">
                   Edit
                 </Link>
               </div>

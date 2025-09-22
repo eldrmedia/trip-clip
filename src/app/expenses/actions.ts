@@ -1,8 +1,7 @@
 // src/app/expenses/actions.ts
 "use server";
 
-import { getServerSession } from "next-auth";
-import { authConfig } from "@/lib/auth";
+import { getServerSession, type Session } from "next-auth";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
@@ -35,7 +34,8 @@ type PaymentMethod = z.infer<typeof PaymentMethodEnum>;
 type ExpenseInput = z.infer<typeof ExpenseSchema>;
 
 async function requireUserId(): Promise<string> {
-  const s = await getServerSession(authConfig);
+  // Avoid `{}` inference by asserting Session | null
+  const s = (await getServerSession()) as unknown as Session | null;
   if (!s?.user) redirect("/login");
 
   // Prefer explicit id if your auth populates it
@@ -43,9 +43,10 @@ async function requireUserId(): Promise<string> {
   if (uid) return uid;
 
   // Fallback by email if necessary
-  if (s.user.email) {
+  const email = (s.user as { email?: string | null }).email ?? null;
+  if (email) {
     const found = await prisma.user.findUnique({
-      where: { email: s.user.email },
+      where: { email },
       select: { id: true },
     });
     if (found?.id) return found.id;

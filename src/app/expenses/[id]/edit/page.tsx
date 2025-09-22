@@ -1,21 +1,19 @@
 // src/app/expenses/[id]/edit/page.tsx
-import { getServerSession } from "next-auth";
-import { authConfig } from "@/lib/auth";
+import { getServerSession, type Session } from "next-auth";
 import { redirect, notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { updateExpense, deleteExpense } from "@/app/expenses/actions";
 
-export const revalidate = 0; // ensure dynamic rendering so query params trigger the toaster
+export const revalidate = 0;
 
 export default async function EditExpensePage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  // ✅ Next 15: params is a Promise
   const { id } = await params;
 
-  const s = await getServerSession(authConfig);
+  const s = (await getServerSession()) as unknown as Session | null;
   if (!s?.user) redirect("/login");
   const userId = (s.user as { id: string }).id;
 
@@ -30,16 +28,18 @@ export default async function EditExpensePage({
   ]);
   if (!expense) notFound();
 
-  // Inline server actions so they can be used in form/button actions
+  // ✅ Capture a non-null id for use inside server actions
+  const expenseId = expense.id;
+
   async function save(formData: FormData) {
     "use server";
-    await updateExpense(expense.id, formData);
+    await updateExpense(expenseId, formData);
     redirect("/expenses?success=updated");
   }
 
   async function destroy() {
     "use server";
-    await deleteExpense(expense.id);
+    await deleteExpense(expenseId);
     redirect("/expenses?success=deleted");
   }
 
@@ -48,17 +48,14 @@ export default async function EditExpensePage({
 
   return (
     <div className="max-w-2xl">
-      <h1 className="text-2xl font-semibold mb-4">Edit expense</h1>
+      <h1 className="mb-4 text-2xl font-semibold">Edit expense</h1>
 
-      {/* Single form: primary action = save; delete uses formAction override */}
-      <form action={save} className="space-y-4 bg-white rounded-xl border p-4">
+      <form action={save} className="space-y-4 rounded-xl border bg-white p-4">
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
             <div className="text-sm">Type</div>
             <select name="type" defaultValue={expense.type} className="mt-1 w-full rounded border px-3 py-2">
-              {types.map((t) => (
-                <option key={t}>{t}</option>
-              ))}
+              {types.map((t) => (<option key={t}>{t}</option>))}
             </select>
           </label>
 
@@ -72,7 +69,7 @@ export default async function EditExpensePage({
             />
           </label>
 
-          <label className="block col-span-2">
+          <label className="col-span-2 block">
             <div className="text-sm">Merchant</div>
             <input name="merchant" defaultValue={expense.merchant ?? ""} className="mt-1 w-full rounded border px-3 py-2" />
           </label>
@@ -97,11 +94,7 @@ export default async function EditExpensePage({
             <div className="text-sm">Payment method</div>
             <select name="paymentMethod" defaultValue={expense.paymentMethod ?? ""} className="mt-1 w-full rounded border px-3 py-2">
               <option value="">—</option>
-              {pay.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
+              {pay.map((p) => (<option key={p} value={p}>{p}</option>))}
             </select>
           </label>
 
@@ -109,32 +102,21 @@ export default async function EditExpensePage({
             <div className="text-sm">Trip</div>
             <select name="tripId" defaultValue={expense.tripId ?? ""} className="mt-1 w-full rounded border px-3 py-2">
               <option value="">—</option>
-              {trips.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.title}
-                </option>
-              ))}
+              {trips.map((t) => (<option key={t.id} value={t.id}>{t.title}</option>))}
             </select>
           </label>
 
-          <label className="block col-span-2">
+          <label className="col-span-2 block">
             <div className="text-sm">Notes</div>
             <textarea name="notes" defaultValue={expense.notes ?? ""} className="mt-1 w-full rounded border px-3 py-2" rows={3} />
           </label>
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Save = green */}
-          <button className="rounded bg-green-600 hover:bg-green-700 text-white px-3 py-2 text-sm" type="submit">
+          <button className="rounded bg-green-600 px-3 py-2 text-sm text-white hover:bg-green-700" type="submit">
             Save changes
           </button>
-
-          {/* Delete uses the same form; do NOT set formMethod/formEncType when using a function formAction */}
-          <button
-            formAction={destroy}
-            className="rounded bg-red-600 hover:bg-red-700 text-white px-3 py-2 text-sm"
-            type="submit"
-          >
+          <button formAction={destroy} className="rounded bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-700" type="submit">
             Delete
           </button>
         </div>
