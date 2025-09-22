@@ -1,11 +1,20 @@
 // src/app/api/cron/gmail-poll/route.ts
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getGoogleOAuthForUser } from "@/lib/google";
-import { parseEmail } from "@/lib/parsers/parseItinerary";
 import { createOrUpdateTripArtifacts } from "@/lib/googleArtifacts";
 import { logActivity } from "@/lib/log";
 import type { gmail_v1 } from "googleapis";
+
+// IMPORTANT: install a Node-safe File *before* we touch any code that might use it.
+// (Static imports are evaluated before module body, so we will dynamically import
+// parseItinerary later, after this runs.)
+import { installNodeFilePolyfill } from "@/lib/nodeFilePolyfill";
+installNodeFilePolyfill();
 
 // ---- Minimal internal Gmail types (match what parseEmail expects) ----
 type GmailHeader = { name?: string; value?: string };
@@ -32,7 +41,7 @@ function normalizePart(p?: gmail_v1.Schema$MessagePart | null): GmailPart | unde
   if (!p) return undefined;
   return {
     partId: p.partId ?? undefined,
-    mimeType: p.mimeType ?? undefined, // strip null
+    mimeType: p.mimeType ?? undefined,
     filename: p.filename ?? undefined,
     headers: p.headers?.map(h => ({ name: h.name ?? undefined, value: h.value ?? undefined })) ?? undefined,
     body: p.body
@@ -61,24 +70,23 @@ const SEARCH_QUERY =
   'newer_than:14d (from:("Capital One Travel" OR capitalone.com OR amadeus.com OR expedia.com OR united.com OR delta.com OR aa.com OR southwest.com) subject:(itinerary OR flight OR booking OR "trip confirmation"))';
 
 export async function GET() {
+  // ⬇️ Dynamically import parseEmail *after* the polyfill is installed.
+  const { parseEmail } = await import("@/lib/parsers/parseItinerary");
+
   const users = await prisma.user.findMany({ where: { googleGmailConnected: true } });
   let processed = 0;
 
   for (const u of users) {
     try {
       const { gmail } = await getGoogleOAuthForUser(u.id);
-      const list = await gmail.users.messages.list({
-        userId: "me",
-        q: SEARCH_QUERY,
-        maxResults: 20,
-      });
+      const list = await gmail.users.messages.list({ userId: "me", q: SEARCH_QUERY, maxResults: 20 });
       const msgs = list.data.messages ?? [];
       if (msgs.length === 0) continue;
 
       const seenIds = new Set(
         (
           await prisma.gmailMessage.findMany({
-            where: { userId: u.id, gmailId: { in: msgs.map(m => m.id!) } },
+            where: { userId: u.id, gmailId: { in: msgs.map(m => m.id!).filter(Boolean) } },
             select: { gmailId: true },
           })
         ).map(e => e.gmailId)

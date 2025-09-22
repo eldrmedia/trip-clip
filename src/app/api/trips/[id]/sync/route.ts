@@ -1,5 +1,5 @@
+// src/app/api/trips/[id]/sync/route.ts
 import { getServerSession, type Session } from "next-auth";
-import { authConfig } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { createOrUpdateTripArtifacts } from "@/lib/googleArtifacts";
@@ -12,8 +12,8 @@ export async function POST(
 ) {
   const { id } = await ctx.params;
 
-  // Cast so TS doesn't treat this as `{}` and complain about `.user`
-  const s = (await getServerSession(authConfig)) as unknown as Session | null;
+  // ✅ In route handlers, call without config and assert Session | null
+  const s = (await getServerSession()) as unknown as Session | null;
   if (!s?.user) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }

@@ -3,22 +3,32 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-type Item =
-  | { href: string; label: string; active: (p: string) => boolean; children?: undefined }
-  | { label: string; section: true; children: { href: string; label: string; active: (p: string) => boolean }[] };
+// Discriminated union: leaf items carry `section?: false`
+type LeafItem = {
+  href: string;
+  label: string;
+  active: (p: string) => boolean;
+  section?: false;
+};
+type SectionItem = {
+  label: string;
+  section: true;
+  children: LeafItem[];
+};
+type Item = LeafItem | SectionItem;
 
 const items: Item[] = [
-  { href: "/",         label: "Dashboard", active: p => p === "/" },
-  { href: "/trips",    label: "Trips",     active: p => p === "/trips" || p.startsWith("/trips/") },
-  { href: "/expenses", label: "Expenses",  active: p => p === "/expenses" || p.startsWith("/expenses/") },
-  { href: "/reports",  label: "Reports",   active: p => p === "/reports" || p.startsWith("/reports/") },
-  { href: "/activity", label: "Activity",  active: p => p === "/activity" },
+  { href: "/",         label: "Dashboard", active: p => p === "/", section: false },
+  { href: "/trips",    label: "Trips",     active: p => p === "/trips" || p.startsWith("/trips/"), section: false },
+  { href: "/expenses", label: "Expenses",  active: p => p === "/expenses" || p.startsWith("/expenses/"), section: false },
+  { href: "/reports",  label: "Reports",   active: p => p === "/reports" || p.startsWith("/reports/"), section: false },
+  { href: "/activity", label: "Activity",  active: p => p === "/activity", section: false },
   {
     label: "Settings",
     section: true,
     children: [
-      { href: "/settings/profile", label: "Profile", active: p => p === "/settings/profile" },
-      { href: "/settings/google",  label: "Google",  active: p => p === "/settings/google"  },
+      { href: "/settings/profile", label: "Profile", active: p => p === "/settings/profile", section: false },
+      { href: "/settings/google",  label: "Google",  active: p => p === "/settings/google",  section: false },
     ],
   },
 ];
@@ -29,7 +39,7 @@ export default function AppSidebar() {
   return (
     <nav aria-label="Primary" className="hidden md:block">
       <ul className="space-y-1">
-        {items.map(entry => {
+        {items.map((entry) => {
           if ("section" in entry && entry.section) {
             return (
               <li key={entry.label} className="mt-4">
@@ -37,7 +47,7 @@ export default function AppSidebar() {
                   {entry.label}
                 </div>
                 <ul className="space-y-1">
-                  {entry.children.map(child => {
+                  {entry.children.map((child) => {
                     const isActive = child.active(pathname);
                     return (
                       <li key={child.href}>
@@ -49,14 +59,20 @@ export default function AppSidebar() {
                             "focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600",
                             isActive
                               ? "bg-neutral-900 text-white"
-                              : "text-neutral-800 hover:bg-black/10"
+                              : "text-neutral-800 hover:bg-black/10",
                           ].join(" ")}
                         >
                           {isActive && (
-                            <span className="absolute inset-y-1 left-0 w-1 rounded-r bg-white/80 mix-blend-overlay" aria-hidden />
+                            <span
+                              className="absolute inset-y-1 left-0 w-1 rounded-r bg-white/80 mix-blend-overlay"
+                              aria-hidden
+                            />
                           )}
                           <span
-                            className={["inline-block h-2 w-2 rounded-full", isActive ? "bg-white" : "bg-neutral-600"].join(" ")}
+                            className={[
+                              "inline-block h-2 w-2 rounded-full",
+                              isActive ? "bg-white" : "bg-neutral-600",
+                            ].join(" ")}
                             aria-hidden
                           />
                           <span className="truncate">{child.label}</span>
@@ -69,6 +85,7 @@ export default function AppSidebar() {
             );
           }
 
+          // Narrowed to LeafItem here
           const isActive = entry.active(pathname);
           return (
             <li key={entry.href}>
@@ -80,14 +97,20 @@ export default function AppSidebar() {
                   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600",
                   isActive
                     ? "bg-neutral-900 text-white"
-                    : "text-neutral-800 hover:bg-black/10"
+                    : "text-neutral-800 hover:bg-black/10",
                 ].join(" ")}
               >
                 {isActive && (
-                  <span className="absolute inset-y-1 left-0 w-1 rounded-r bg-white/80 mix-blend-overlay" aria-hidden />
+                  <span
+                    className="absolute inset-y-1 left-0 w-1 rounded-r bg-white/80 mix-blend-overlay"
+                    aria-hidden
+                  />
                 )}
                 <span
-                  className={["inline-block h-2 w-2 rounded-full", isActive ? "bg-white" : "bg-neutral-600"].join(" ")}
+                  className={[
+                    "inline-block h-2 w-2 rounded-full",
+                    isActive ? "bg-white" : "bg-neutral-600",
+                  ].join(" ")}
                   aria-hidden
                 />
                 <span className="truncate">{entry.label}</span>
@@ -96,7 +119,10 @@ export default function AppSidebar() {
               {/* Inline quick add under Expenses */}
               {entry.href === "/expenses" && (
                 <div className="pl-7 pt-1">
-                  <Link href="/expenses/quick" className="text-xs text-neutral-700 underline-offset-2 hover:underline">
+                  <Link
+                    href="/expenses/quick"
+                    className="text-xs text-neutral-700 underline-offset-2 hover:underline"
+                  >
                     + Quick add expense
                   </Link>
                 </div>

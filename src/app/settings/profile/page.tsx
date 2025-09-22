@@ -4,20 +4,19 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 
 export default async function ProfileSettings() {
-  // Avoid `{}` inference from getServerSession(authConfig)
   const s = (await getServerSession()) as unknown as Session | null;
   if (!s?.user) redirect("/login");
 
   const su = s.user as { id?: string; email?: string | null };
 
-  let user =
+  // ✅ use const (assigned once)
+  const user =
     (su.id && (await prisma.user.findUnique({ where: { id: su.id } }))) ||
     (su.email && (await prisma.user.findUnique({ where: { email: su.email } }))) ||
     null;
 
   if (!user) redirect("/login");
 
-  // ✅ Capture stable non-null id for use in server action closures
   const userId: string = user.id;
 
   async function save(formData: FormData) {
@@ -38,13 +37,8 @@ export default async function ProfileSettings() {
       <form action={save} className="space-y-3 rounded-xl border bg-white p-4">
         <label className="block">
           <div className="text-sm">Name</div>
-          <input
-            name="name"
-            defaultValue={user.name ?? ""}
-            className="mt-1 w-full rounded border px-3 py-2"
-          />
+          <input name="name" defaultValue={user.name ?? ""} className="mt-1 w-full rounded border px-3 py-2" />
         </label>
-
         <label className="block">
           <div className="text-sm">Default currency</div>
           <input
@@ -53,16 +47,10 @@ export default async function ProfileSettings() {
             className="mt-1 w-40 rounded border px-3 py-2"
           />
         </label>
-
         <label className="block">
           <div className="text-sm">Cost center</div>
-          <input
-            name="costCenter"
-            defaultValue={user.costCenter ?? ""}
-            className="mt-1 w-60 rounded border px-3 py-2"
-          />
+          <input name="costCenter" defaultValue={user.costCenter ?? ""} className="mt-1 w-60 rounded border px-3 py-2" />
         </label>
-
         <button className="rounded-lg bg-black px-3 py-2 text-sm text-white">Save</button>
       </form>
     </div>

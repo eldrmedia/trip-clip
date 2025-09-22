@@ -1,17 +1,18 @@
 // src/lib/auth.ts
 import "server-only";
 
-import NextAuth, { type NextAuthConfig } from "next-auth";
+import NextAuth from "next-auth";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import EmailProvider from "next-auth/providers/email";
 import Google from "next-auth/providers/google";
 import { prisma } from "./db";
 
+import type { Session, User, Account, Profile } from "next-auth";
+import type { JWT } from "next-auth/jwt";
+
 function scopesToFlags(scopeStr: string | null | undefined) {
   const scopes = (scopeStr ?? "").split(/\s+/);
-  const gmail = scopes.some((s) =>
-    s.startsWith("https://www.googleapis.com/auth/gmail")
-  );
+  const gmail = scopes.some((s) => s.startsWith("https://www.googleapis.com/auth/gmail"));
   const calendar =
     scopes.includes("https://www.googleapis.com/auth/calendar") ||
     scopes.includes("https://www.googleapis.com/auth/calendar.events");
@@ -19,9 +20,11 @@ function scopesToFlags(scopeStr: string | null | undefined) {
   return { gmail, calendar, drive };
 }
 
-export const authConfig: NextAuthConfig = {
+// NOTE: no `as const` anywhere — keep providers mutable for NextAuth types
+export const authConfig = {
   adapter: PrismaAdapter(prisma),
-  session: { strategy: "jwt" },
+
+session: { strategy: "jwt" as const },
 
   providers: [
     EmailProvider({
@@ -62,17 +65,32 @@ export const authConfig: NextAuthConfig = {
   pages: { signIn: "/login" },
 
   callbacks: {
-    async jwt({ token, user }) {
-      if (
-        user &&
-        "id" in user &&
-        typeof (user as { id?: unknown }).id === "string"
-      ) {
+    async jwt({
+      token,
+      user,
+    }: {
+      token: JWT & { id?: string };
+      user?: User | null;
+      account?: Account | null;
+      profile?: Profile | null;
+      trigger?: string;
+      session?: Session;
+      isNewUser?: boolean;
+    }) {
+      if (user && typeof (user as { id?: unknown }).id === "string") {
         token.id = (user as { id: string }).id;
       }
       return token;
     },
-    async session({ session, token }) {
+
+    async session({
+      session,
+      token,
+    }: {
+      session: Session;
+      token: JWT & { id?: string };
+      user?: User | null;
+    }) {
       if (session.user && token.id) {
         (session.user as { id?: string }).id = token.id as string;
       }
@@ -81,9 +99,9 @@ export const authConfig: NextAuthConfig = {
   },
 
   events: {
-    async linkAccount({ user, account }) {
+    async linkAccount({ user, account }: { user: User; account?: Account | null }) {
       if (account?.provider !== "google") return;
-      const { gmail, calendar, drive } = scopesToFlags(account.scope);
+      const { gmail, calendar, drive } = scopesToFlags(account.scope as string | undefined);
       await prisma.user.update({
         where: { id: user.id },
         data: {
@@ -93,9 +111,10 @@ export const authConfig: NextAuthConfig = {
         },
       });
     },
-    async signIn({ user, account }) {
+
+    async signIn({ user, account }: { user: User; account?: Account | null }) {
       if (account?.provider !== "google") return;
-      const { gmail, calendar, drive } = scopesToFlags(account.scope);
+      const { gmail, calendar, drive } = scopesToFlags(account.scope as string | undefined);
       if (gmail || calendar || drive) {
         await prisma.user.update({
           where: { id: user.id },

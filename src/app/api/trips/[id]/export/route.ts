@@ -1,6 +1,5 @@
 // src/app/api/trips/[id]/export/route.ts
 import { getServerSession, type Session } from "next-auth";
-import { authConfig } from "@/lib/auth";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { getGoogleOAuthForUser } from "@/lib/google";
@@ -27,8 +26,8 @@ export async function GET(
 ) {
   const { id } = await context.params;
 
-  // Tell TS what this returns (avoid `{}` inference)
-  const s = (await getServerSession(authConfig)) as unknown as Session | null;
+  // ✅ In route handlers, call without config and assert Session | null
+  const s = (await getServerSession()) as unknown as Session | null;
   if (!s?.user) return new Response("Unauthorized", { status: 401 });
 
   const userId = (s.user as { id: string }).id;
@@ -68,10 +67,7 @@ export async function GET(
         mimeType: "text/csv",
         parents: trip.driveFolderId ? [trip.driveFolderId] : undefined,
       };
-      const media = {
-        mimeType: "text/csv",
-        body: Buffer.from(csv),
-      };
+      const media = { mimeType: "text/csv", body: Buffer.from(csv) };
       const created = await drive.files.create({
         requestBody: fileMeta,
         media,
@@ -85,17 +81,13 @@ export async function GET(
           level: "info",
           action: "trip_csv_export_drive",
           message: `Uploaded ${filename} to Drive`,
-          meta: {
-            fileId,
-            name: created.data.name,
-            link: created.data.webViewLink,
-          },
+          meta: { fileId, name: created.data.name, link: created.data.webViewLink },
         },
       });
-      return new Response(
-        JSON.stringify({ ok: true, fileId, link: created.data.webViewLink }),
-        { status: 200, headers: { "content-type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ ok: true, fileId, link: created.data.webViewLink }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "drive upload failed";
       return new Response(JSON.stringify({ ok: false, error: message }), {

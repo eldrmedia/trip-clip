@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { ReactNode } from "react";
 
 type Tab = {
   href: string;
   label: string;
   isActive: (path: string) => boolean;
-  icon: (active: boolean) => JSX.Element;
+  icon: (active: boolean) => ReactNode; // <-- was JSX.Element
 };
 
 const tabs: Tab[] = [
@@ -17,8 +18,13 @@ const tabs: Tab[] = [
     isActive: (p) => p === "/",
     icon: (a) => (
       <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-        <path d="M4 10l8-6 8 6v8a2 2 0 0 1-2 2h-4V12H10v8H6a2 2 0 0 1-2-2v-8Z"
-          className="fill-none stroke-current" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d="M4 10l8-6 8 6v8a2 2 0 0 1-2 2h-4V12H10v8H6a2 2 0 0 1-2-2v-8Z"
+          className="fill-none stroke-current"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </svg>
     ),
   },
@@ -28,8 +34,13 @@ const tabs: Tab[] = [
     isActive: (p) => p === "/trips" || p.startsWith("/trips/"),
     icon: (a) => (
       <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-        <path d="M20 12H4m14 0c0 4-3 7-7 7s-7-3-7-7 3-7 7-7 7 3 7 7Zm-9 0h4"
-          className="fill-none stroke-current" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d="M20 12H4m14 0c0 4-3 7-7 7s-7-3-7-7 3-7 7-7 7 3 7 7Zm-9 0h4"
+          className="fill-none stroke-current"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </svg>
     ),
   },
@@ -39,8 +50,13 @@ const tabs: Tab[] = [
     isActive: (p) => p === "/expenses" || p.startsWith("/expenses/"),
     icon: (a) => (
       <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-        <path d="M4 7h16v10H4zM8 3v4m8-4v4M7 11h10"
-          className="fill-none stroke-current" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d="M4 7h16v10H4zM8 3v4m8-4v4M7 11h10"
+          className="fill-none stroke-current"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </svg>
     ),
   },
@@ -50,8 +66,13 @@ const tabs: Tab[] = [
     isActive: (p) => p === "/reports" || p.startsWith("/reports/"),
     icon: (a) => (
       <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-        <path d="M4 19h16M6 17V7m6 10V5m6 12V9"
-          className="fill-none stroke-current" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d="M4 19h16M6 17V7m6 10V5m6 12V9"
+          className="fill-none stroke-current"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </svg>
     ),
   },
@@ -61,8 +82,13 @@ const tabs: Tab[] = [
     isActive: (p) => p.startsWith("/settings"),
     icon: (a) => (
       <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-        <path d="M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm8 4a8 8 0 1 1-16 0"
-          className="fill-none stroke-current" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d="M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm8 4a8 8 0 1 1-16 0"
+          className="fill-none stroke-current"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </svg>
     ),
   },

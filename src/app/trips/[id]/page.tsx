@@ -1,6 +1,5 @@
 // src/app/trips/[id]/page.tsx
-import { getServerSession } from "next-auth";
-import { authConfig } from "@/lib/auth";
+import { getServerSession, type Session } from "next-auth";
 import { redirect, notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import React from "react";
@@ -12,7 +11,8 @@ export default async function TripDetail({
 }) {
   const { id } = await params;
 
-  const s = await getServerSession(authConfig);
+  // Avoid `{}` inference: assert Session | null
+  const s = (await getServerSession()) as unknown as Session | null;
   if (!s?.user) redirect("/login");
   const userId = (s.user as { id: string }).id;
 
@@ -25,21 +25,20 @@ export default async function TripDetail({
   const total = trip.expenses.reduce((acc, e) => acc + Number(e.amountHome), 0);
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="mx-auto max-w-5xl space-y-6">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">{trip.title}</h1>
-          <div className="text-gray-600 text-sm">
+          <div className="text-sm text-gray-600">
             {new Date(trip.startDate).toLocaleDateString()} →{" "}
             {new Date(trip.endDate).toLocaleDateString()} • {trip.status}
           </div>
         </div>
 
-
         {/* CSV download hits an API route, so <a> is fine */}
         <a
           href={`/api/trips/${trip.id}/export`}
-          className="rounded bg-black text-white px-4 py-2 text-sm"
+          className="rounded bg-black px-4 py-2 text-sm text-white"
         >
           Download CSV
         </a>
@@ -50,8 +49,8 @@ export default async function TripDetail({
         </form>
       </div>
 
-      <div className="bg-white rounded-xl shadow overflow-hidden border">
-        <div className="grid grid-cols-7 gap-3 px-4 py-2 text-xs font-medium border-b">
+      <div className="overflow-hidden rounded-xl border bg-white shadow">
+        <div className="grid grid-cols-7 gap-3 border-b px-4 py-2 text-xs font-medium">
           <div className="col-span-2">Merchant</div>
           <div>Type</div>
           <div>Date</div>
@@ -60,13 +59,10 @@ export default async function TripDetail({
           <div>Notes</div>
         </div>
         {trip.expenses.length === 0 ? (
-          <div className="px-4 py-6 text-gray-600 text-sm">No expenses yet.</div>
+          <div className="px-4 py-6 text-sm text-gray-600">No expenses yet.</div>
         ) : (
           trip.expenses.map((e) => (
-            <div
-              key={e.id}
-              className="grid grid-cols-7 gap-3 px-4 py-2 border-b last:border-0 text-sm"
-            >
+            <div key={e.id} className="grid grid-cols-7 gap-3 border-b px-4 py-2 text-sm last:border-0">
               <div className="col-span-2">{e.merchant ?? "—"}</div>
               <div>{e.type}</div>
               <div>{new Date(e.date).toLocaleDateString()}</div>
