@@ -4,6 +4,59 @@ import { logActivity } from "@/lib/log";
 import type { ParsedItin } from "@/lib/parsers/parseItinerary";
 import { getGoogleOAuthForUser } from "@/lib/google";
 
+/** Minimal shapes for the Google clients we actually use (no heavy deps). */
+type DriveFilesCreateArgs = {
+  requestBody: { name: string; mimeType: string };
+  fields?: string;
+};
+type DriveFilesCreateResp = { data?: { id?: string; name?: string; webViewLink?: string } };
+interface DriveFiles {
+  create(args: DriveFilesCreateArgs): Promise<DriveFilesCreateResp>;
+}
+interface DriveClient {
+  files: DriveFiles;
+}
+
+type CalendarEventsInsertArgs = {
+  calendarId: string;
+  requestBody: {
+    summary: string;
+    description?: string;
+    start: { dateTime: string };
+    end: { dateTime: string };
+  };
+};
+type CalendarEventsInsertResp = { data?: { id?: string } };
+interface CalendarEvents {
+  insert(args: CalendarEventsInsertArgs): Promise<CalendarEventsInsertResp>;
+}
+interface CalendarClient {
+  events: CalendarEvents;
+}
+
+type GoogleClients = { drive?: DriveClient; calendar?: CalendarClient };
+
+/** Lightweight runtime check so we can safely narrow unknown → GoogleClients. */
+function isGoogleClients(v: unknown): v is GoogleClients {
+  if (typeof v !== "object" || v === null) return false;
+  const maybe = v as Record<string, unknown>;
+  const driveOk =
+    maybe.drive === undefined ||
+    (typeof maybe.drive === "object" &&
+      maybe.drive !== null &&
+      "files" in (maybe.drive as Record<string, unknown>) &&
+      typeof (maybe.drive as { files?: unknown }).files === "object");
+
+  const calOk =
+    maybe.calendar === undefined ||
+    (typeof maybe.calendar === "object" &&
+      maybe.calendar !== null &&
+      "events" in (maybe.calendar as Record<string, unknown>) &&
+      typeof (maybe.calendar as { events?: unknown }).events === "object");
+
+  return driveOk && calOk;
+}
+
 export async function createOrUpdateTripArtifacts(
   userId: string,
   tripId: string,
@@ -28,12 +81,14 @@ export async function createOrUpdateTripArtifacts(
   if (!user || !trip) return;
 
   // Try to get Google clients (may throw if not configured)
-  let drive: any | undefined;
-  let calendar: any | undefined;
+  let drive: DriveClient | undefined;
+  let calendar: CalendarClient | undefined;
   try {
-    const clients = await getGoogleOAuthForUser(userId);
-    drive = (clients as any).drive;
-    calendar = (clients as any).calendar;
+    const clientsUnknown = await getGoogleOAuthForUser(userId) as unknown;
+    if (isGoogleClients(clientsUnknown)) {
+      drive = clientsUnknown.drive;
+      calendar = clientsUnknown.calendar;
+    }
   } catch {
     // continue with whatever is available
   }
@@ -49,7 +104,7 @@ export async function createOrUpdateTripArtifacts(
         },
         fields: "id, name, webViewLink",
       });
-      const id = created?.data?.id as string | undefined;
+      const id = created?.data?.id;
       if (id) {
         await prisma.trip.update({ where: { id: trip.id }, data: { driveFolderId: id } });
         await logActivity(userId, {
@@ -131,15 +186,15 @@ function toDateStr(d: Date | string) {
   const dt = typeof d === "string" ? new Date(d) : d;
   return isNaN(+dt) ? "" : dt.toISOString().slice(0, 10);
 }
+
 function buildTitle(current: string, parsed?: ParsedItin): string | null {
   if (!parsed) return null;
   const from = parsed.legs?.[0]?.fromCity;
   const to = parsed.legs?.[parsed.legs.length - 1]?.toCity;
   const conf = parsed.confirmation;
-  const parts = [
-    from && to ? `${from} → ${to}` : undefined,
-    conf ? `[${conf}]` : undefined,
-  ].filter(Boolean);
+  const parts = [from && to ? `${from} → ${to}` : undefined, conf ? `[${conf}]` : undefined].filter(
+    Boolean
+  ) as string[];
   if (parts.length === 0) return null;
   return parts.join(" ");
 }

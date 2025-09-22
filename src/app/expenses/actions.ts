@@ -8,24 +8,41 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { z } from "zod";
 
+// Keep these enums in Zod so the form coercion is strict
+const PaymentMethodEnum = z.enum(["CORP_CARD", "PERSONAL", "CASH"]);
+const ExpenseTypeEnum = z.enum([
+  "FLIGHT",
+  "HOTEL",
+  "MEAL",
+  "RIDESHARE",
+  "RENTAL",
+  "MILEAGE",
+  "OTHER",
+]);
+
 const ExpenseSchema = z.object({
-  type: z.enum(["FLIGHT","HOTEL","MEAL","RIDESHARE","RENTAL","MILEAGE","OTHER"]),
-  date: z.string().min(1),
+  type: ExpenseTypeEnum,
+  date: z.string().min(1), // ISO date string from <input type="date">
   merchant: z.string().optional(),
   amountOriginal: z.coerce.number().finite().nonnegative(),
   currencyOriginal: z.string().min(3),
-  paymentMethod: z.enum(["CORP_CARD","PERSONAL","CASH"]).optional(),
+  paymentMethod: PaymentMethodEnum.optional(),
   tripId: z.string().optional(),
   notes: z.string().optional(),
 });
 
-async function requireUserId() {
+type PaymentMethod = z.infer<typeof PaymentMethodEnum>;
+type ExpenseInput = z.infer<typeof ExpenseSchema>;
+
+async function requireUserId(): Promise<string> {
   const s = await getServerSession(authConfig);
   if (!s?.user) redirect("/login");
+
+  // Prefer explicit id if your auth populates it
   const uid = (s.user as { id?: string; email?: string | null }).id;
   if (uid) return uid;
 
-  // fallback by email if needed
+  // Fallback by email if necessary
   if (s.user.email) {
     const found = await prisma.user.findUnique({
       where: { email: s.user.email },
@@ -36,19 +53,26 @@ async function requireUserId() {
   throw new Error("Could not resolve current user id");
 }
 
-export async function createExpense(formData: FormData) {
-  const userId = await requireUserId();
-
-  const parsed = ExpenseSchema.parse({
+function parseExpenseForm(formData: FormData): ExpenseInput {
+  // Let Zod do all the coercion/validation
+  return ExpenseSchema.parse({
     type: formData.get("type"),
     date: formData.get("date"),
     merchant: formData.get("merchant") || undefined,
     amountOriginal: formData.get("amountOriginal"),
-    currencyOriginal: (formData.get("currencyOriginal") || "USD").toString().toUpperCase(),
+    currencyOriginal: (formData.get("currencyOriginal") || "USD")
+      .toString()
+      .toUpperCase(),
     paymentMethod: formData.get("paymentMethod") || undefined,
     tripId: formData.get("tripId") || undefined,
     notes: formData.get("notes") || undefined,
   });
+}
+
+export async function createExpense(formData: FormData) {
+  const userId = await requireUserId();
+
+  const parsed = parseExpenseForm(formData);
 
   const date = new Date(parsed.date);
   if (Number.isNaN(+date)) throw new Error("Invalid date");
@@ -68,9 +92,10 @@ export async function createExpense(formData: FormData) {
       merchant: parsed.merchant || null,
       amountOriginal: parsed.amountOriginal,
       currencyOriginal: parsed.currencyOriginal,
-      amountHome: parsed.amountOriginal, // (convert later if you add FX)
+      amountHome: parsed.amountOriginal, // TODO: convert if you add FX
       currencyHome,
-      paymentMethod: (parsed.paymentMethod as any) || null,
+      // ✅ no `any` — Zod ensures union, Prisma accepts string or null
+      paymentMethod: (parsed.paymentMethod as PaymentMethod | undefined) ?? null,
       tripId: parsed.tripId || null,
       notes: parsed.notes || null,
       receiptUrl: null,
@@ -78,23 +103,13 @@ export async function createExpense(formData: FormData) {
   });
 
   revalidatePath("/expenses");
-  // If you want to send them to the trip, do that — but for toast, send them back to /expenses with the flag:
   redirect("/expenses?success=created");
 }
 
 export async function updateExpense(id: string, formData: FormData) {
   const userId = await requireUserId();
 
-  const parsed = ExpenseSchema.parse({
-    type: formData.get("type"),
-    date: formData.get("date"),
-    merchant: formData.get("merchant") || undefined,
-    amountOriginal: formData.get("amountOriginal"),
-    currencyOriginal: (formData.get("currencyOriginal") || "USD").toString().toUpperCase(),
-    paymentMethod: formData.get("paymentMethod") || undefined,
-    tripId: formData.get("tripId") || undefined,
-    notes: formData.get("notes") || undefined,
-  });
+  const parsed = parseExpenseForm(formData);
 
   const date = new Date(parsed.date);
   if (Number.isNaN(+date)) throw new Error("Invalid date");
@@ -113,7 +128,8 @@ export async function updateExpense(id: string, formData: FormData) {
       // keep amountHome/currencyHome simple for now
       amountHome: parsed.amountOriginal,
       currencyHome: existing.currencyHome,
-      paymentMethod: (parsed.paymentMethod as any) || null,
+      // ✅ no `any`
+      paymentMethod: (parsed.paymentMethod as PaymentMethod | undefined) ?? null,
       tripId: parsed.tripId || null,
       notes: parsed.notes || null,
     },
