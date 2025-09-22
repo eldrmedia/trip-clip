@@ -1,25 +1,26 @@
 // src/lib/nodeFilePolyfill.ts
-// Ensures `globalThis.File` exists in Node runtimes that lack it.
-export function installNodeFilePolyfill() {
-  if (typeof (globalThis as any).File !== "undefined") return;
 
-  try {
-    // Node 18/20 may expose File via node:buffer
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { File } = require("node:buffer");
-    (globalThis as any).File = File;
-    return;
-  } catch {
-    // Minimal fallback
-    class NodeFile extends Blob {
-      name: string;
-      lastModified: number;
-      constructor(bits: BlobPart[], name: string, options: FilePropertyBag = {}) {
-        super(bits, options);
-        this.name = name;
-        this.lastModified = options.lastModified ?? Date.now();
-      }
+/**
+ * Installs a minimal `File` constructor on Node runtimes that don't provide one.
+ * This is enough for basic usages (name + lastModified + Blob methods).
+ */
+type GlobalWithFile = typeof globalThis & { File?: typeof File };
+
+export function installNodeFilePolyfill(): void {
+  const g = globalThis as GlobalWithFile;
+  if (typeof g.File !== "undefined") return;
+
+  class NodeFile extends Blob {
+    name: string;
+    lastModified: number;
+
+    constructor(bits: BlobPart[], name: string, options: FilePropertyBag = {}) {
+      super(bits, options);
+      this.name = name;
+      this.lastModified = options.lastModified ?? Date.now();
     }
-    (globalThis as any).File = NodeFile;
   }
+
+  // Cast to the DOM `File` constructor type for consumer compatibility
+  g.File = NodeFile as unknown as typeof File;
 }
