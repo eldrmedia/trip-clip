@@ -1,5 +1,7 @@
+// src/app/api/trips/[id]/export/route.ts
 import { getServerSession } from "next-auth";
-import { NextRequest } from 'next/server';
+import { authConfig } from "@/lib/auth";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { getGoogleOAuthForUser } from "@/lib/google";
 
@@ -12,22 +14,35 @@ function toCSV<T extends Record<string, unknown>>(rows: T[]) {
     const s = String(v);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  return [headers.join(","), ...rows.map(r => headers.map(h => esc((r as Record<string, unknown>)[h])).join(","))].join("\n");
+  return [
+    headers.join(","),
+    ...rows.map((r) =>
+      headers.map((h) => esc((r as Record<string, unknown>)[h])).join(",")
+    ),
+  ].join("\n");
 }
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const s = await getServerSession();
+// Next 15.x: context.params is a Promise you must await.
+export async function GET(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  const { id } = await context.params;
+
+  const s = await getServerSession(authConfig);
   if (!s?.user) return new Response("Unauthorized", { status: 401 });
 
+  const userId = (s.user as { id: string }).id;
+
   const trip = await prisma.trip.findFirst({
-    where: { id: params.id, userId: (s.user as { id: string }).id },
+    where: { id, userId },
     include: { expenses: true, user: true },
   });
   if (!trip) return new Response("Not found", { status: 404 });
 
-  const rows = trip.expenses.map(e => ({
+  const rows = trip.expenses.map((e) => ({
     trip_title: trip.title,
-    date: new Date(e.date).toISOString().slice(0,10),
+    date: new Date(e.date).toISOString().slice(0, 10),
     type: e.type,
     merchant: e.merchant ?? "",
     amount: e.amountHome.toString(),
@@ -40,13 +55,15 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }));
 
   const csv = toCSV(rows);
-  const filename = `${trip.title.replace(/[^a-z0-9]+/gi,"_")}_${new Date().toISOString().slice(0,10)}.csv`;
+  const filename = `${trip.title.replace(/[^a-z0-9]+/gi, "_")}_${new Date()
+    .toISOString()
+    .slice(0, 10)}.csv`;
 
   // Optional ?drive=1 to upload to Drive and return JSON with file id/link
   const url = new URL(req.url);
   if (url.searchParams.get("drive") === "1") {
     try {
-      const { drive } = await getGoogleOAuthForUser((s.user as { id: string }).id);
+      const { drive } = await getGoogleOAuthForUser(userId);
       const fileMeta = {
         name: filename,
         mimeType: "text/csv",
@@ -61,7 +78,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         media,
         fields: "id, webViewLink, name",
       });
-      const id = created.data.id!;
+      const fileId = created.data.id!;
       await prisma.activityLog.create({
         data: {
           userId: trip.userId,
@@ -69,13 +86,17 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
           level: "info",
           action: "trip_csv_export_drive",
           message: `Uploaded ${filename} to Drive`,
-          meta: { fileId: id, name: created.data.name, link: created.data.webViewLink },
+          meta: {
+            fileId,
+            name: created.data.name,
+            link: created.data.webViewLink,
+          },
         },
       });
-      return new Response(JSON.stringify({ ok: true, fileId: id, link: created.data.webViewLink }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ ok: true, fileId, link: created.data.webViewLink }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "drive upload failed";
       return new Response(JSON.stringify({ ok: false, error: message }), {
