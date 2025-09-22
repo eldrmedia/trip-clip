@@ -13,7 +13,7 @@ export default async function NewTripPage() {
       <h1 className="text-2xl font-semibold mb-4">New Trip</h1>
 
       {/* When using a server action, do not set method/enctype manually */}
-      <form action={createTrip} className="bg-white rounded-xl shadow p-6 space-y-4">
+      <form action={createTrip} className="bg-white rounded-xl border shadow p-6 space-y-4">
         <label className="block">
           <div className="text-sm">Title</div>
           <input name="title" required className="mt-1 w-full rounded border px-3 py-2" placeholder="e.g., Boston Sales Visits" />

@@ -35,6 +35,7 @@ export default async function TripDetail({
           </div>
         </div>
 
+
         {/* CSV download hits an API route, so <a> is fine */}
         <a
           href={`/api/trips/${trip.id}/export`}
@@ -44,12 +45,12 @@ export default async function TripDetail({
         </a>
 
         {/* Example sync action to your API route */}
-        <form action={`/api/trips/${trip.id}/sync`} method="post">
+        <form action={`/api/trips/${trip.id}/sync`} method="post" className="hidden">
           <button className="rounded border px-4 py-2 text-sm">Sync Calendar & Drive</button>
         </form>
       </div>
 
-      <div className="bg-white rounded-xl shadow overflow-hidden">
+      <div className="bg-white rounded-xl shadow overflow-hidden border">
         <div className="grid grid-cols-7 gap-3 px-4 py-2 text-xs font-medium border-b">
           <div className="col-span-2">Merchant</div>
           <div>Type</div>

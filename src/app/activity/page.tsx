@@ -16,7 +16,7 @@ export default async function ActivityPage() {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <h1 className="text-2xl font-semibold">Activity</h1>
-      <div className="bg-white rounded-xl shadow divide-y">
+      <div className="bg-white rounded-xl border shadow divide-y">
         {logs.length === 0 ? (
           <div className="px-4 py-6 text-gray-600 text-sm">No activity yet.</div>
         ) : logs.map(l => (

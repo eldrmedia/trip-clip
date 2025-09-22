@@ -33,7 +33,7 @@ export default async function TripsPage() {
             <li key={t.id}>
               <Link
                 href={`/trips/${t.id}`}
-                className="block rounded bg-white shadow hover:shadow-md transition-shadow focus:outline-none focus:ring-2 focus:ring-black/20"
+                className="block rounded-xl border bg-white shadow hover:shadow-md transition-shadow focus:outline-none focus:ring-2 focus:ring-black/20"
               >
                 <div className="p-4">
                   <div className="font-medium">{t.title}</div>

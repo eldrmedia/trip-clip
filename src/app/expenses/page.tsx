@@ -67,7 +67,7 @@ export default async function ExpensesPage({
         <select
           name="type"
           defaultValue={params.type ?? "ALL"}
-          className="rounded border px-3 py-2 text-sm"
+          className="rounded border bg-white px-3 py-2 text-sm"
         >
           {types.map((t) => (
             <option key={t}>{t}</option>
@@ -77,12 +77,12 @@ export default async function ExpensesPage({
           name="q"
           placeholder="Search merchant/notes…"
           defaultValue={params.q ?? ""}
-          className="rounded border px-3 py-2 text-sm flex-1"
+          className="rounded border bg-white px-3 py-2 text-sm flex-1"
         />
-        <button className="rounded border px-3 py-2 text-sm">Filter</button>
+        <button className="rounded border bg-white px-3 py-2 text-sm">Filter</button>
       </form>
 
-      <div className="bg-white rounded-xl shadow overflow-hidden">
+      <div className="bg-white rounded-xl border shadow overflow-hidden">
         <div className="grid grid-cols-8 gap-3 px-4 py-2 text-xs font-medium border-b">
           <div className="col-span-2">Merchant</div>
           <div>Type</div>

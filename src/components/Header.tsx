@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import AccountMenuClient from "@/components/AccountMenuClient";
 
 /**
  * Header (static brand)
@@ -45,7 +46,9 @@ export default function Header() {
         </Link>
 
         {/* Right side intentionally empty for now */}
-        <div aria-hidden className="w-0" />
+        <div>
+          <AccountMenuClient />
+        </div>
       </div>
     </header>
   );

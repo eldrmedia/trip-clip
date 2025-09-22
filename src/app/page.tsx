@@ -19,7 +19,7 @@ export default async function Dashboard() {
         <Link href="/expenses/new" className="rounded bg-black text-white px-4 py-2">Add Expense</Link>
       </div>
       <div className="grid md:grid-cols-2 gap-6">
-        <section className="bg-white rounded-xl shadow">
+        <section className="bg-white rounded-xl shadow border">
           <div className="px-4 py-3 font-medium border-b">Recent expenses</div>
           {recent.length===0 ? <div className="px-4 py-6 text-gray-500">No expenses yet.</div> :
             recent.map(e=>(
@@ -29,13 +29,13 @@ export default async function Dashboard() {
               </div>
             ))}
         </section>
-        <section className="bg-white rounded-xl shadow">
+        <section className="bg-white rounded-xl shadow border">
           <div className="px-4 py-3 font-medium border-b">Recent trips</div>
           {trips.length===0 ? <div className="px-4 py-6 text-gray-500">No trips yet.</div> :
             trips.map(t=>(
               <div key={t.id} className="px-4 py-3 flex items-center justify-between text-sm border-b last:border-0">
                 <div>{t.title}</div>
-                <Link className="text-blue-600 underline" href={`/trips/${t.id}`}>Open</Link>
+                <Link className="underline" href={`/trips/${t.id}`}>Open</Link>
               </div>
             ))}
         </section>

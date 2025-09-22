@@ -32,7 +32,7 @@ export default async function ProfileSettings() {
   return (
     <div className="max-w-xl space-y-6">
       <h1 className="text-2xl font-semibold">Profile</h1>
-      <form action={save} className="rounded border p-4 space-y-3 bg-white">
+      <form action={save} className="rounded-xl border p-4 space-y-3 bg-white">
         <label className="block">
           <div className="text-sm">Name</div>
           <input
@@ -57,7 +57,7 @@ export default async function ProfileSettings() {
             className="mt-1 w-60 rounded border px-3 py-2"
           />
         </label>
-        <button className="rounded bg-black text-white px-3 py-2 text-sm">Save</button>
+        <button className="rounded-lg bg-black text-white px-3 py-2 text-sm">Save</button>
       </form>
     </div>
   );

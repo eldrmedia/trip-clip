@@ -99,11 +99,11 @@ export default async function GoogleSettings() {
       <h1 className="text-2xl font-semibold">Google Connections</h1>
       <FlashFromQuery />
 
-<div className="rounded border p-4 bg-white">
-  <div className="font-medium mb-2">Gmail Import</div>
-  <p className="text-sm text-gray-600 mb-2">Run the importer immediately (otherwise it runs on a schedule).</p>
-  <ImportGmailNowButton />
-</div>      
+      <div className="rounded-xl border p-4 bg-white">
+        <div className="font-medium mb-2">Gmail Import</div>
+        <p className="text-sm text-gray-600 mb-2">Run the importer immediately (otherwise it runs on a schedule).</p>
+        <ImportGmailNowButton />
+      </div>      
 
       <Section
         title="Gmail (read + labels)"
@@ -165,7 +165,7 @@ export default async function GoogleSettings() {
         }
       />
 
-      <form action={save} className="rounded border p-4 space-y-3 bg-white">
+      <form action={save} className="rounded-xl border p-4 space-y-3 bg-white">
         <div className="font-medium">Preferences</div>
         <label className="flex items-center gap-2">
           <input
@@ -219,7 +219,7 @@ function Section({
   disconnectAction: React.ReactNode;
 }) {
   return (
-    <div className="rounded border p-4 bg-white flex items-center justify-between">
+    <div className="rounded-xl border p-4 bg-white flex items-center justify-between">
       <div>
         <div className="font-medium">{title}</div>
         <div className="text-sm text-gray-600">{help}</div>

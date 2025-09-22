@@ -19,7 +19,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-neutral-50 text-neutral-900 antialiased">
+      <body className="bg-neutral-100 text-neutral-900 antialiased">
         {/* Client shell decides when to show header/tabs and applies padding */}
         <ClientChrome>{children}</ClientChrome>
 
