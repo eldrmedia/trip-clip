@@ -1,3 +1,4 @@
+// src/app/ClientChrome.tsx
 "use client";
 
 import { usePathname } from "next/navigation";
@@ -8,32 +9,39 @@ import FAB from "../components/FAB";
 
 export default function ClientChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "/";
-  const hideHeader = pathname === "/login";
-  const hideTabs = pathname === "/login";
 
-  // Where to show the FAB
+  // Hide all chrome on the login page
+  const isLogin = pathname === "/login";
+
+  // Show FAB only on these pages (and never on login)
   const showFab =
-    pathname === "/expenses" || pathname.startsWith("/trips/") || pathname === "/trips";
+    !isLogin &&
+    (pathname === "/expenses" || pathname === "/trips" || pathname.startsWith("/trips/"));
+
+  // Utility to join classes
+  const cx = (...parts: Array<string | false>) => parts.filter(Boolean).join(" ");
 
   return (
     <>
-      {!hideHeader && <Header />}
+      {/* Header */}
+      {!isLogin && <Header />}
 
-      <div
-        className={[
-          hideHeader ? "" : "pt-14 md:pt-16",
-          hideTabs ? "" : "with-bottom-tabs",
-          "min-h-[100dvh]"
-        ].join(" ")}
-      >
-        <div className="mx-auto max-w-screen-xl px-4 lg:px-6 lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-6">
-          {/* Sidebar (desktop) */}
-          <aside
-            className="hidden lg:block lg:sticky lg:top-16 lg:h-[calc(100dvh-4rem)] lg:py-2"
-            aria-label="Sidebar"
-          >
-            <AppSidebar />
-          </aside>
+      <div className={cx(!isLogin && "pt-14 md:pt-16", !isLogin && "with-bottom-tabs", "min-h-[100dvh]")}>
+        <div
+          className={cx(
+            "mx-auto max-w-screen-xl px-4 lg:px-6",
+            !isLogin && "lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-6"
+          )}
+        >
+          {/* Sidebar (desktop only, hidden on login) */}
+          {!isLogin && (
+            <aside
+              className="hidden lg:block lg:sticky lg:top-16 lg:h-[calc(100dvh-4rem)] lg:py-2"
+              aria-label="Sidebar"
+            >
+              <AppSidebar />
+            </aside>
+          )}
 
           {/* Main content */}
           <main role="main" className="pb-4">
@@ -42,11 +50,11 @@ export default function ClientChrome({ children }: { children: React.ReactNode }
         </div>
       </div>
 
-      {/* FAB (mobile + desktop) */}
+      {/* FAB (mobile + desktop), never on login */}
       {showFab && <FAB href="/expenses/quick" label="Quick add expense" />}
 
-      {/* Bottom tabs (mobile only) */}
-      {!hideTabs && <AppTabsMobile />}
+      {/* Bottom tabs (mobile only), hidden on login */}
+      {!isLogin && <AppTabsMobile />}
     </>
   );
 }

@@ -1,9 +1,10 @@
 // src/app/layout.tsx
-import "./globals.css";
 import type { Metadata, Viewport } from "next";
+import "./globals.css";
 import { Analytics } from "@vercel/analytics/next";
-import { Toaster } from "react-hot-toast";
+import { getServerSession } from "next-auth";
 import ClientChrome from "./ClientChrome";
+import { Toaster } from "react-hot-toast";
 
 export const metadata: Metadata = {
   title: "TripClip",
@@ -16,15 +17,21 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  // Server-side session check so we can hide chrome when logged out
+  const session = await getServerSession();
+  const authed = !!session?.user;
+
   return (
     <html lang="en">
-      <body className="bg-neutral-100 text-neutral-900 antialiased">
-        {/* Client shell decides when to show header/tabs and applies padding */}
-        <ClientChrome>{children}</ClientChrome>
-
-        {/* Keep analytics and toaster inside body */}
+      <body className="bg-neutral-50 text-neutral-900 antialiased">
         <Analytics />
+        {/* Pass 'authed' down; ClientChrome will hide header/sidebar/tabs when false or on /login */}
+        <ClientChrome authed={authed}>{children}</ClientChrome>
         <Toaster position="bottom-right" toastOptions={{ duration: 4000 }} />
       </body>
     </html>
