@@ -25,6 +25,7 @@ CREATE TABLE "public"."User" (
     "role" "public"."Role" NOT NULL DEFAULT 'EMPLOYEE',
     "defaultCurrency" TEXT NOT NULL DEFAULT 'USD',
     "costCenter" TEXT,
+    "emailVerified" TIMESTAMP(3),
     "googleConnected" BOOLEAN NOT NULL DEFAULT false,
     "googleGmailConnected" BOOLEAN NOT NULL DEFAULT false,
     "googleCalendarConnected" BOOLEAN NOT NULL DEFAULT false,
@@ -49,6 +50,9 @@ CREATE TABLE "public"."Trip" (
     "region" TEXT,
     "purpose" TEXT,
     "status" "public"."TripStatus" NOT NULL DEFAULT 'PLANNED',
+    "locationCity" TEXT,
+    "locationState" TEXT,
+    "locationCountry" TEXT,
     "calendarEventIds" JSONB,
     "driveFolderId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -187,6 +191,7 @@ CREATE TABLE "public"."Account" (
     "scope" TEXT,
     "id_token" TEXT,
     "session_state" TEXT,
+    "refresh_token_expires_in" INTEGER,
 
     CONSTRAINT "Account_pkey" PRIMARY KEY ("id")
 );
@@ -278,7 +283,7 @@ ALTER TABLE "public"."ActivityLog" ADD CONSTRAINT "ActivityLog_userId_fkey" FORE
 ALTER TABLE "public"."ExportProfile" ADD CONSTRAINT "ExportProfile_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."Account" ADD CONSTRAINT "Account_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "public"."Account" ADD CONSTRAINT "Account_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."Session" ADD CONSTRAINT "Session_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
